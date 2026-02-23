@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dashboard — VoiceMail</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>tailwind.config = { darkMode: 'class' }</script>
+  <style>
+    body { background: linear-gradient(135deg, #0f0c29, #302b63, #24243e); }
+    .glass {
+      background: rgba(255,255,255,0.07);
+      backdrop-filter: blur(16px);
+      border: 1px solid rgba(255,255,255,0.15);
+    }
+
+    /* Mic button pulse rings */
+    @keyframes ping-slow { 0%{transform:scale(1);opacity:.6} 100%{transform:scale(2);opacity:0} }
+    .ring1 { animation: ping-slow 1.4s ease-out infinite; }
+    .ring2 { animation: ping-slow 1.4s ease-out .5s infinite; }
+
+    /* Recording glow */
+    .recording { box-shadow: 0 0 0 4px rgba(239,68,68,.5), 0 0 30px rgba(239,68,68,.3) !important; }
+
+    .email-card:hover { background: rgba(255,255,255,0.12); }
+  </style>
+</head>
+<body class="min-h-screen text-white">
+
+  <!-- Navbar -->
+  <nav class="glass px-6 py-4 flex justify-between items-center border-b border-white/10">
+    <div class="flex items-center gap-2 text-xl font-extrabold">
+      🎙️ <span class="text-purple-300">VoiceMail</span>
+    </div>
+    <div class="flex items-center gap-4">
+      <span class="text-gray-300 text-sm">{{ user.email }}</span>
+      <button onclick="logoutUser()"
+        class="text-sm bg-white/10 hover:bg-white/20 px-4 py-2 rounded-xl transition">
+        Logout
+      </button>
+    </div>
+  </nav>
+
+  <div class="max-w-6xl mx-auto px-4 py-8 grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+    <!-- ── LEFT: Voice Assistant ─────────────────────────────────────────── -->
+    <div class="lg:col-span-1 space-y-4">
+      <div class="glass rounded-3xl p-6">
+        <h2 class="text-lg font-bold mb-1">Voice Assistant</h2>
+        <p class="text-gray-400 text-sm mb-6">Click the mic and speak your command</p>
+
+        <!-- Microphone button -->
+        <div class="flex flex-col items-center gap-3">
+          <div class="relative flex justify-center items-center h-40">
+            <!-- Pulse rings while recording (red) -->
+            <span id="ring1" class="ring1 hidden absolute w-24 h-24 rounded-full bg-red-500/30"></span>
+            <span id="ring2" class="ring2 hidden absolute w-24 h-24 rounded-full bg-red-500/20"></span>
+
+            <!-- Pulse rings while AI is speaking (orange) -->
+            <span id="speakRing1" class="ring1 hidden absolute w-24 h-24 rounded-full bg-orange-500/30"></span>
+            <span id="speakRing2" class="ring2 hidden absolute w-24 h-24 rounded-full bg-orange-300/20"></span>
+
+            <!-- Mic button — always visible; dimmed during TTS -->
+            <button id="micBtn" onclick="toggleRecording()"
+              class="relative z-10 w-20 h-20 rounded-full bg-gradient-to-br from-purple-600 to-pink-600
+                     flex items-center justify-center text-3xl shadow-xl hover:scale-110 transition-all">
+              🎤
+            </button>
+          </div>
+
+          <!-- Stop button — shown below mic only while AI is speaking -->
+          <button id="stopBtn" onclick="stopSpeaking()"
+            class="hidden px-5 py-2 rounded-full bg-gradient-to-r from-orange-500 to-red-600
+                   text-sm font-bold shadow-lg hover:scale-105 transition-all animate-pulse">
+            ⏹ Stop Speaking
+          </button>
+        </div>
+
+        <!-- Status text -->
+        <p id="statusText" class="text-center text-gray-400 text-sm mt-2">Ready to listen</p>
+
+        <!-- Transcription box -->
+        <div class="mt-4 bg-black/30 rounded-xl p-3 min-h-[48px]">
+          <span class="text-xs text-gray-500 block mb-1">You said:</span>
+          <p id="transcriptionText" class="text-purple-200 text-sm font-medium">—</p>
+        </div>
+
+        <!-- Response box -->
+        <div class="mt-3 bg-black/30 rounded-xl p-3 min-h-[48px]">
+          <span class="text-xs text-gray-500 block mb-1">Assistant:</span>
+          <p id="responseText" class="text-green-300 text-sm font-medium">—</p>
+        </div>
+      </div>
+
+      <!-- Quick commands hint -->
+      <div class="glass rounded-3xl p-5">
+        <h3 class="text-sm font-bold text-gray-300 mb-3">💡 Try saying…</h3>
+        <ul class="space-y-2 text-sm text-gray-400">
+          <li>🗣 "Read my emails"</li>
+          <li>✉️ "Send an email"</li>
+          <li>⏹ "Stop" — interrupt AI while reading</li>
+          <li>❌ "Cancel" — abort email while composing</li>
+          <li>🚪 "Logout"</li>
+          <li>❓ "Help"</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- ── RIGHT: Inbox + Compose ────────────────────────────────────────── -->
+    <div class="lg:col-span-2 space-y-6">
+
+      <!-- Inbox -->
+      <div class="glass rounded-3xl p-6">
+        <div class="flex justify-between items-center mb-5">
+          <h2 class="text-lg font-bold">📥 Inbox</h2>
+          <button onclick="loadEmails()"
+            class="text-sm bg-purple-600/40 hover:bg-purple-600/60 px-4 py-1.5 rounded-xl transition">
+            Refresh
+          </button>
+        </div>
+        <div id="emailList" class="space-y-3">
+          <p class="text-gray-500 text-sm">Loading emails…</p>
+        </div>
+      </div>
+
+      <!-- Compose -->
+      <div class="glass rounded-3xl p-6">
+        <h2 class="text-lg font-bold mb-5">✏️ Compose Email</h2>
+        <form id="composeForm" onsubmit="sendEmail(event)" class="space-y-4">
+          <div>
+            <label class="block text-sm text-gray-400 mb-1">To</label>
+            <input id="toAddr" type="email" required
+              class="w-full bg-white/10 border border-white/20 rounded-xl px-4 py-3 text-white
+                     placeholder-gray-500 focus:outline-none focus:border-purple-400 transition"
+              placeholder="recipient@gmail.com" />
+          </div>
+          <div>
+            <label class="block text-sm text-gray-400 mb-1">Subject</label>
+            <input id="subject" type="text" required
+              class="w-full bg-white/10 border border-white/20 rounded-xl px-4 py-3 text-white
+                     placeholder-gray-500 focus:outline-none focus:border-purple-400 transition"
+              placeholder="Subject" />
+          </div>
+          <div>
+            <label class="block text-sm text-gray-400 mb-1">Message</label>
+            <textarea id="body" rows="4" required
+              class="w-full bg-white/10 border border-white/20 rounded-xl px-4 py-3 text-white
+                     placeholder-gray-500 focus:outline-none focus:border-purple-400 transition resize-none"
+              placeholder="Write your message…"></textarea>
+          </div>
+          <div class="flex gap-3">
+            <button type="submit"
+              class="flex-1 bg-gradient-to-r from-purple-600 to-pink-600 hover:opacity-90
+                     font-bold py-3 rounded-xl transition-all hover:scale-105">
+              📤 Send Email
+            </button>
+            <button type="button" onclick="clearCompose()"
+              class="px-5 py-3 bg-white/10 hover:bg-white/20 rounded-xl transition">
+              Clear
+            </button>
+          </div>
+        </form>
+        <div id="sendStatus" class="hidden mt-3 text-center text-sm rounded-xl py-2 px-4"></div>
+      </div>
+    </div>
+  </div>
+
+  <audio id="ttsAudio" class="hidden"></audio>
+
+  <!-- ── Email View Modal ────────────────────────────────────────────────── -->
+  <div id="emailModal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4"
+       style="background:rgba(0,0,0,0.7)" onclick="closeEmailIfBg(event)">
+    <div class="glass rounded-3xl w-full max-w-2xl max-h-[85vh] flex flex-col">
+      <!-- Modal header -->
+      <div class="flex justify-between items-start p-6 border-b border-white/10">
+        <div class="flex-1 pr-4">
+          <p id="modalSubject" class="text-lg font-bold text-white"></p>
+          <p id="modalFrom"    class="text-sm text-gray-400 mt-1"></p>
+          <p id="modalDate"    class="text-xs text-gray-500 mt-0.5"></p>
+        </div>
+        <button onclick="document.getElementById('emailModal').classList.add('hidden')"
+          class="text-gray-400 hover:text-white text-2xl leading-none">✕</button>
+      </div>
+      <!-- Modal body -->
+      <div class="p-6 overflow-y-auto flex-1">
+        <pre id="modalBody"
+          class="text-gray-200 text-sm leading-relaxed whitespace-pre-wrap font-sans"></pre>
+      </div>
+      <!-- Reply shortcut -->
+      <div class="p-4 border-t border-white/10 flex gap-3">
+        <button onclick="replyTo()"
+          class="flex-1 bg-purple-600/50 hover:bg-purple-600 py-2 rounded-xl text-sm font-semibold transition">
+          ↩ Reply
+        </button>
+        <button onclick="document.getElementById('emailModal').classList.add('hidden')"
+          class="px-5 py-2 bg-white/10 hover:bg-white/20 rounded-xl text-sm transition">
+          Close
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/static/js/voice.js"></script>
+  <script>
+    // Load inbox on page ready
+    let _emails = [];
+    document.addEventListener('DOMContentLoaded', loadEmails);
+
+    // ── Email loader ──────────────────────────────────────────────────────────
+    async function loadEmails() {
+      const list = document.getElementById('emailList');
+      list.innerHTML = '<p class="text-gray-500 text-sm">Loading…</p>';
+      try {
+        const res = await fetch('/emails');
+        const data = await res.json();
+        _emails = data.emails || [];
+        renderEmails(_emails);
+      } catch {
+        list.innerHTML = '<p class="text-red-400 text-sm">Failed to load emails.</p>';
+      }
+    }
+
+    function renderEmails(emails) {
+      const list = document.getElementById('emailList');
+      if (!emails.length) {
+        list.innerHTML = '<p class="text-gray-500 text-sm">No emails found.</p>';
+        return;
+      }
+        list.innerHTML = emails.map((e, i) => `
+        <div class="email-card flex justify-between items-start bg-white/5 rounded-2xl p-4 transition cursor-pointer"
+             onclick="openEmail(${i})">
+          <div class="flex-1 min-w-0 pr-4">
+            <p class="font-semibold text-sm text-white truncate">${escHtml(e.subject)}</p>
+            <p class="text-gray-400 text-xs mt-0.5 truncate">From: ${escHtml(e.from)}</p>
+            <p class="text-gray-500 text-xs mt-1 line-clamp-2">${escHtml(e.snippet)}</p>
+          </div>
+          <span class="text-xs text-gray-500 whitespace-nowrap">${escHtml(e.date.split(' ').slice(1,4).join(' '))}</span>
+        </div>
+      `).join('');
+    }
+
+    function escHtml(str) {
+      const d = document.createElement('div');
+      d.textContent = str || '';
+      return d.innerHTML;
+    }
+
+    // ── Email sender ─────────────────────────────────────────────────────────
+    async function sendEmail(e) {
+      e.preventDefault();
+      const btn = e.target.querySelector('button[type="submit"]');
+      const statusDiv = document.getElementById('sendStatus');
+      btn.disabled = true;
+      btn.textContent = '⏳ Sending…';
+
+      try {
+        const res = await fetch('/send-email', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            to: document.getElementById('toAddr').value,
+            subject: document.getElementById('subject').value,
+            body: document.getElementById('body').value,
+          }),
+        });
+        const data = await res.json();
+        statusDiv.textContent = data.message || (data.success ? 'Sent!' : 'Failed.');
+        statusDiv.className = res.ok
+          ? 'mt-3 text-center text-sm rounded-xl py-2 px-4 bg-green-900/40 text-green-300'
+          : 'mt-3 text-center text-sm rounded-xl py-2 px-4 bg-red-900/40 text-red-300';
+        statusDiv.classList.remove('hidden');
+        if (res.ok) clearCompose();
+      } catch {
+        statusDiv.textContent = 'Network error.';
+        statusDiv.className = 'mt-3 text-center text-sm rounded-xl py-2 px-4 bg-red-900/40 text-red-300';
+        statusDiv.classList.remove('hidden');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = '📤 Send Email';
+      }
+    }
+
+    function clearCompose() {
+      document.getElementById('toAddr').value = '';
+      document.getElementById('subject').value = '';
+      document.getElementById('body').value = '';
+    }
+
+    // ── Email modal ───────────────────────────────────────────────────────────
+    function openEmail(idx) {
+      const e = _emails[idx];
+      if (!e) return;
+      document.getElementById('modalSubject').textContent = e.subject || '(No subject)';
+      document.getElementById('modalFrom').textContent    = 'From: ' + e.from;
+      document.getElementById('modalDate').textContent    = e.date;
+      document.getElementById('modalBody').textContent    = e.body || e.snippet || '(Empty message)';
+      document.getElementById('emailModal').classList.remove('hidden');
+    }
+
+    function closeEmailIfBg(event) {
+      if (event.target === document.getElementById('emailModal'))
+        document.getElementById('emailModal').classList.add('hidden');
+    }
+
+    function replyTo() {
+      const subj = document.getElementById('modalSubject').textContent;
+      const from = document.getElementById('modalFrom').textContent.replace('From: ', '').trim();
+      // Extract email address from "Name <email>" format
+      const match = from.match(/<(.+?)>/);
+      document.getElementById('toAddr').value    = match ? match[1] : from;
+      document.getElementById('subject').value   = subj.startsWith('Re:') ? subj : 'Re: ' + subj;
+      document.getElementById('emailModal').classList.add('hidden');
+      document.getElementById('toAddr').scrollIntoView({ behavior: 'smooth' });
+      document.getElementById('toAddr').focus();
+    }
+
+    // ── Logout ────────────────────────────────────────────────────────────────
+    async function logoutUser() {
+      await fetch('/logout');
+      window.location.href = '/';
+    }
+  </script>
+</body>
+</html>

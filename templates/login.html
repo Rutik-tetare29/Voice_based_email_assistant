@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Login — VoiceMail</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>tailwind.config = { darkMode: 'class' }</script>
+  <style>
+    body { background: linear-gradient(135deg, #0f0c29, #302b63, #24243e); }
+    .glass {
+      background: rgba(255,255,255,0.07);
+      backdrop-filter: blur(16px);
+      border: 1px solid rgba(255,255,255,0.15);
+    }
+    .tab-active { background: rgba(139,92,246,0.3); border-color: #8b5cf6; }
+    input:-webkit-autofill { -webkit-box-shadow: 0 0 0 30px #1e1b4b inset !important; -webkit-text-fill-color: #fff !important; }
+  </style>
+</head>
+<body class="min-h-screen flex items-center justify-center text-white p-4">
+  <div class="glass rounded-3xl w-full max-w-md p-8">
+    <!-- Header -->
+    <div class="text-center mb-8">
+      <div class="text-5xl mb-3">🎙️</div>
+      <h1 class="text-3xl font-extrabold text-purple-300">VoiceMail</h1>
+      <p class="text-gray-400 mt-1">Sign in to your email assistant</p>
+    </div>
+
+    <!-- Tabs -->
+    <div class="flex rounded-xl overflow-hidden border border-white/10 mb-6">
+      <button id="tab-google" onclick="switchTab('google')"
+        class="flex-1 py-2 text-sm font-semibold tab-active transition-all">
+        Google OAuth
+      </button>
+      <button id="tab-app" onclick="switchTab('app')"
+        class="flex-1 py-2 text-sm font-semibold transition-all">
+        App Password
+      </button>
+    </div>
+
+    <!-- Google OAuth Panel -->
+    <div id="panel-google">
+      <p class="text-gray-400 text-sm text-center mb-4">
+        Sign in securely using your Google account. No password required.
+      </p>
+      <a href="/login/google"
+         class="flex items-center justify-center gap-3 w-full bg-white text-gray-800
+                font-bold py-3 px-6 rounded-xl hover:bg-gray-100 transition-all hover:scale-105">
+        <img src="https://www.google.com/favicon.ico" class="w-5 h-5" alt="G" />
+        Continue with Google
+      </a>
+    </div>
+
+    <!-- App Password Panel -->
+    <div id="panel-app" class="hidden">
+      <p class="text-gray-400 text-sm text-center mb-4">
+        Use your Gmail address and a Google App Password.
+      </p>
+      <form id="appPassForm" onsubmit="appPasswordLogin(event)" class="space-y-4">
+        <div>
+          <label class="block text-sm text-gray-300 mb-1">Gmail Address</label>
+          <input id="email" type="email" required
+            class="w-full bg-white/10 border border-white/20 rounded-xl px-4 py-3 text-white
+                   placeholder-gray-500 focus:outline-none focus:border-purple-400 transition"
+            placeholder="you@gmail.com" />
+        </div>
+        <div>
+          <label class="block text-sm text-gray-300 mb-1">App Password</label>
+          <input id="password" type="password" required
+            class="w-full bg-white/10 border border-white/20 rounded-xl px-4 py-3 text-white
+                   placeholder-gray-500 focus:outline-none focus:border-purple-400 transition"
+            placeholder="xxxx xxxx xxxx xxxx" />
+        </div>
+        <button type="submit"
+          class="w-full bg-purple-600 hover:bg-purple-500 font-bold py-3 rounded-xl transition-all hover:scale-105">
+          Sign In
+        </button>
+      </form>
+    </div>
+
+    <!-- Error message -->
+    <div id="error-msg" class="hidden mt-4 text-red-400 text-sm text-center bg-red-900/30 rounded-xl py-2 px-4"></div>
+
+    <p class="text-center text-gray-500 text-xs mt-6">
+      <a href="/" class="hover:text-gray-300">← Back to Home</a>
+    </p>
+  </div>
+
+  <script>
+    function switchTab(tab) {
+      const tabs = ['google', 'app'];
+      tabs.forEach(t => {
+        document.getElementById(`tab-${t}`).classList.toggle('tab-active', t === tab);
+        document.getElementById(`panel-${t}`).classList.toggle('hidden', t !== tab);
+      });
+    }
+
+    async function appPasswordLogin(e) {
+      e.preventDefault();
+      const email = document.getElementById('email').value;
+      const password = document.getElementById('password').value;
+      const errBox = document.getElementById('error-msg');
+
+      try {
+        const res = await fetch('/login/app-password', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password }),
+        });
+        const data = await res.json();
+        if (res.ok) {
+          window.location.href = data.redirect || '/dashboard';
+        } else {
+          errBox.textContent = data.error || 'Login failed';
+          errBox.classList.remove('hidden');
+        }
+      } catch {
+        errBox.textContent = 'Network error. Please try again.';
+        errBox.classList.remove('hidden');
+      }
+    }
+  </script>
+</body>
+</html>

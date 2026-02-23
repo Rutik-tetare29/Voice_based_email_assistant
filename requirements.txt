@@ -1,0 +1,17 @@
+# Core
+flask==3.0.3
+flask-login==0.6.3
+python-dotenv==1.0.1
+
+# Speech
+vosk==0.3.45
+pyttsx3==2.90
+
+# Google OAuth + Gmail API
+google-auth==2.29.0
+google-auth-oauthlib==1.2.0
+google-auth-httplib2==0.2.0
+google-api-python-client==2.131.0
+
+# Audio processing (needed on some platforms)
+pyaudio==0.2.14

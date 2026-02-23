@@ -1,0 +1,60 @@
+# ── Python ────────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.pyc
+*.egg-info/
+dist/
+build/
+*.egg
+
+# ── Virtual environment ────────────────────────────────────────────────────────
+venv/
+.venv/
+env/
+.env/
+ENV/
+
+# ── Environment / secrets — NEVER commit these ────────────────────────────────
+.env
+*.env
+!.env.example
+
+# ── Vosk model (large binary files — download separately) ─────────────────────
+model/
+models/
+vosk-model*/
+
+# ── Generated audio files ─────────────────────────────────────────────────────
+static/audio/*.wav
+static/audio/*.mp3
+
+# ── Google OAuth credentials ───────────────────────────────────────────────────
+client_secrets.json
+credentials.json
+token.json
+*.pickle
+
+# ── Flask / runtime ────────────────────────────────────────────────────────────
+instance/
+*.sqlite3
+*.db
+flask_session/
+
+# ── OS / editor ────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ── Logs ──────────────────────────────────────────────────────────────────────
+*.log
+logs/
+
+# ── Uploaded / temp audio ─────────────────────────────────────────────────────
+uploads/
+*.tmp
+input_*.wav
