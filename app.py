@@ -4,7 +4,7 @@ from flask_login import LoginManager, login_required, current_user, logout_user
 from config import Config
 from auth.google_auth import google_auth_bp, GoogleUser
 from auth.app_password_auth import apppass_auth_bp, AppPasswordUser
-from services.voice_processor import process_voice_command
+from services.voice_processor import process_voice_command, process_text_compose_input
 from services.email_service import fetch_emails, send_email
 
 # ── App factory ──────────────────────────────────────────────────────────────
@@ -65,6 +65,23 @@ def voice_process():
 
     audio_file = request.files["audio"]
     result = process_voice_command(audio_file, session)
+    return jsonify(result)
+
+
+@app.route("/voice/compose-text", methods=["POST"])
+@login_required
+def voice_compose_text():
+    """
+    Accepts a typed field value for the active voice compose step.
+    Body: { "field": "to" | "subject" | "body", "value": "..." }
+    Returns the same JSON shape as /voice/process.
+    """
+    data  = request.get_json(force=True) or {}
+    field = data.get("field", "").strip()
+    value = data.get("value", "").strip()
+    if not field or not value:
+        return jsonify({"error": "Missing field or value"}), 400
+    result = process_text_compose_input(field, value, session)
     return jsonify(result)
 
 

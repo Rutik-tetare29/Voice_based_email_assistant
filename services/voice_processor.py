@@ -10,6 +10,7 @@ Pipeline:
     6. Return JSON payload
 """
 import os
+import re
 import uuid
 import logging
 import difflib
@@ -96,6 +97,121 @@ _CONFIRM_EXACT = {
     "send it", "do it", "go ahead", "go", "proceed",
     "yes please", "please send", "absolutely", "sure", "correct",
 }
+
+
+# ── Number-word → digit table (covers 0-19 and tens up to 90) ─────────────────
+_NUM_WORDS = {
+    "zero":"0","one":"1","two":"2","three":"3","four":"4",
+    "five":"5","six":"6","seven":"7","eight":"8","nine":"9",
+    "ten":"10","eleven":"11","twelve":"12","thirteen":"13",
+    "fourteen":"14","fifteen":"15","sixteen":"16","seventeen":"17",
+    "eighteen":"18","nineteen":"19",
+    "twenty":"20","thirty":"30","forty":"40","fifty":"50",
+    "sixty":"60","seventy":"70","eighty":"80","ninety":"90",
+}
+# compound tens: "twenty one" … "ninety nine"
+_TENS = ["twenty","thirty","forty","fifty","sixty","seventy","eighty","ninety"]
+_ONES = ["one","two","three","four","five","six","seven","eight","nine"]
+
+
+def _replace_number_words(t: str) -> str:
+    """Replace spoken number words with digits, e.g. 'twenty nine' → '29'."""
+    # compound tens first ("twenty one" → "21")
+    for ten in _TENS:
+        for one in _ONES:
+            t = re.sub(rf'\b{ten}\s+{one}\b',
+                       str(int(_NUM_WORDS[ten]) + int(_NUM_WORDS[one])), t)
+    # single words
+    for word, digit in _NUM_WORDS.items():
+        t = re.sub(rf'\b{word}\b', digit, t)
+    return t
+
+
+# ── Known domain spoken-form fixes ────────────────────────────────────────────
+_DOMAIN_FIXES = [
+    # Gmail variants
+    (r'\bg\s*mail\b',       'gmail'),
+    (r'\bgemail\b',         'gmail'),
+    (r'\bg-mail\b',         'gmail'),
+    # Hotmail / Outlook
+    (r'\bhot\s*mail\b',     'hotmail'),
+    (r'\bout\s*look\b',     'outlook'),
+    # Yahoo
+    (r'\byah+oo\b',         'yahoo'),
+    # TLD: "com" mis-heard
+    (r'\b(?:calm|come|comma|khan|con|gom|cam)\b', 'com'),
+    # TLD: "in" short form
+    (r'\b(?:inn|an|and)$',  'in'),
+    # TLD: "net"
+    (r'\b(?:naet|neat|met)\b', 'net'),
+    # TLD: "org"
+    (r'\b(?:org|aura|alba)\b', 'org'),
+    # TLD: "edu"
+    (r'\b(?:edu|eddo|ado)\b', 'edu'),
+]
+
+
+def _normalize_email_address(text: str) -> str:
+    """
+    Convert a spoken email address to a valid format.
+    Handles the many ways Vosk (small model) mis-transcribes email components.
+
+    Pronunciation guide spoken to the user:
+        name  [at / at the rate / @ / add / hat]  domain  [dot / period / full stop]  tld
+    """
+    t = text.lower().strip()
+
+    # ── 0. Number words → digits ──────────────────────────────────────────────
+    t = _replace_number_words(t)
+
+    # ── 1. Domain spoken-form fixes (before @ replacement so 'add' isn't
+    #        accidentally turned into a digit) ─────────────────────────────────
+    for pattern, replacement in _DOMAIN_FIXES:
+        t = re.sub(pattern, replacement, t)
+
+    # ── 2. @ substitutes ─────────────────────────────────────────────────────
+    # "at the rate (of)?"
+    t = re.sub(r'\bat\s+the\s+rate\s+(?:of\s+)?', '@', t)
+    # "at sign" / "at symbol" / "@ symbol"
+    t = re.sub(r'\bat\s+(?:sign|symbol|mark)\b', '@', t)
+    # "commercial at"
+    t = re.sub(r'\bcommercial\s+at\b', '@', t)
+    # Vosk mis-hears "at" as "add" / "hat" / "that" / "had" / "rat" / "bat"
+    t = re.sub(r'\b(?:add|hat|that|had|rat|bat|cat|fat|sat|@)\b', '@', t)
+    # Plain "at" between two non-space sequences
+    t = re.sub(r'(?<=\S)\s+at\s+(?=\S)', '@', t)
+    # Remove stray "at" at start if it survived
+    t = re.sub(r'^at\s+', '@', t)
+
+    # ── 3. Dot substitutes ────────────────────────────────────────────────────
+    # "full stop", "period", "point", "dot"
+    t = re.sub(r'\s*\b(?:dot|period|full\s+stop|point|por)\b\s*', '.', t)
+
+    # ── 4. Special character names ────────────────────────────────────────────
+    t = re.sub(r'\s*\bunderscore\b\s*', '_', t)
+    t = re.sub(r'\s*\b(?:dash|hyphen|minus)\b\s*', '-', t)
+    t = re.sub(r'\s*\bplus\b\s*', '+', t)
+
+    # ── 5. Strip filler words that creep in ───────────────────────────────────
+    # "my email is", "send to", "the address is", etc.
+    t = re.sub(r'^(?:my\s+)?(?:email\s+(?:is\s+|address\s+is\s+)?'  \
+               r'|address\s+is\s+|send\s+(?:it\s+)?to\s+|to\s+)?', '', t)
+
+    # ── 6. Collapse whitespace inside the address ─────────────────────────────
+    # At this point anything left that is a space inside the email is wrong
+    t = re.sub(r'\s+', '', t)
+
+    # ── 7. Cleanup double punctuation / leading-trailing junk ─────────────────
+    t = re.sub(r'\.{2,}', '.', t)   # ".." → "."
+    t = re.sub(r'@{2,}', '@', t)    # "@@" → "@"
+    t = t.strip('.@_-')
+
+    return t
+
+
+def _is_valid_email(addr: str) -> bool:
+    """Basic sanity check — must have exactly one @ and at least one dot after it."""
+    return bool(re.match(r'^[^@\s]+@[^@\s]+\.[^@\s]+$', addr))
 
 
 def _fuzzy_match(word: str, targets: set, cutoff: float = 0.72) -> bool:
@@ -225,27 +341,55 @@ def _handle_send_email(session: dict, transcription: str) -> str:
 
     # ── Step 1: recipient ─────────────────────────────────────────────────────
     if step == "to":
-        to_addr = transcription.strip()
-        session["email_compose"] = dict(compose, to=to_addr, step="subject")
-        return f"Got it — sending to {to_addr}. What is the subject?"
+        raw     = transcription.strip()
+        to_addr = _normalize_email_address(raw)
+        logger.info("Compose 'to': raw=%r  normalised=%r", raw, to_addr)
+
+        retries = compose.get("to_retries", 0)
+
+        if not _is_valid_email(to_addr):
+            # Keep step as "to", increment retry counter
+            new_retries = retries + 1
+            session["email_compose"] = dict(compose, to_retries=new_retries)
+            session.modified = True
+            if new_retries >= 2:
+                # After 2 failures, suggest typing
+                return (
+                    f"I heard: {raw!r} — that doesn't look like a valid email address. "
+                    "Please type the address in the text box that appeared below the mic, "
+                    "then say continue."
+                )
+            return (
+                f"I heard: {raw!r} — that doesn't look like a valid email address. "
+                "Please say it again clearly. For example: "
+                "r u t i k at gmail dot com."
+            )
+
+        session["email_compose"] = dict(compose, to=to_addr, step="subject", to_retries=0)
+        session.modified = True
+        readable = to_addr.replace("@", " at ").replace(".", " dot ")
+        return f"Got it — sending to {readable}. What is the subject?"
 
     # ── Step 2: subject ───────────────────────────────────────────────────────
     elif step == "subject":
         subject = transcription.strip()
         session["email_compose"] = dict(compose, subject=subject, step="body")
+        session.modified = True
         return f"Subject: {subject}. What is your message?"
 
     # ── Step 3: body ─────────────────────────────────────────────────────────
     elif step == "body":
-        body = transcription.strip()
+        body    = transcription.strip()
         session["email_compose"] = dict(compose, body=body, step="confirm")
+        session.modified = True
         to      = compose["to"]
         subject = compose["subject"]
+        readable_to = to.replace("@", " at ").replace(".", " dot ")
         return (
             f"Ready to send. "
-            f"To: {to}. Subject: {subject}. "
+            f"To: {readable_to}. Subject: {subject}. "
             f"Message: {body}. "
-            f"Say confirm to send, or cancel to abort."
+            f"Say yes or confirm to send, or cancel to abort."
         )
 
     # ── Step 4: confirm ───────────────────────────────────────────────────────
@@ -255,11 +399,17 @@ def _handle_send_email(session: dict, transcription: str) -> str:
             subject = compose["subject"]
             body    = compose["body"]
             session.pop("email_compose", None)
+            session.modified = True
             try:
-                send_email(session, to, subject, body)
-                return f"Email sent successfully to {to}!"
+                success, message = send_email(session, to, subject, body)
+                if success:
+                    readable_to = to.replace("@", " at ").replace(".", " dot ")
+                    return f"Email sent successfully to {readable_to}!"
+                else:
+                    logger.error("Send email returned failure: %s", message)
+                    return f"Failed to send email. {message}. Please try again."
             except Exception as exc:
-                logger.error("Send email failed: %s", exc)
+                logger.error("Send email exception: %s", exc)
                 return "Sorry, I could not send the email. Please check your settings and try again."
         else:
             # Didn't confirm → treat as implicit cancel
@@ -356,5 +506,86 @@ def process_voice_command(audio_file: FileStorage, session: dict) -> dict:
         "response_text": response_text,
         "audio_url":     audio_url,
         # Tells the frontend which compose step we are on (or null)
+        "email_step":    (session.get("email_compose") or {}).get("step"),
+    }
+
+
+# ── Text-input path for compose fields (bypasses STT) ─────────────────────────
+def process_text_compose_input(field: str, value: str, session: dict) -> dict:
+    """
+    Accepts a typed value for one compose field and advances the flow.
+    Returns the same dict shape as process_voice_command.
+    """
+    compose = session.get("email_compose")
+
+    # Safety: if no compose session is active, start one
+    if compose is None:
+        session["email_compose"] = {"step": "to", "to": "", "subject": "", "body": ""}
+        session.modified = True
+        compose = session["email_compose"]
+
+    response_text = ""
+
+    if field == "to":
+        # Validate the typed address (basic sanity, not full RFC)
+        if not _is_valid_email(value):
+            response_text = (
+                f"'{value}' doesn't look like a valid email address. "
+                "Please check and try again."
+            )
+        else:
+            session["email_compose"] = dict(compose, to=value, step="subject", to_retries=0)
+            session.modified = True
+            readable = value.replace("@", " at ").replace(".", " dot ")
+            response_text = f"Got it — sending to {readable}. Now say the subject."
+
+    elif field == "subject":
+        session["email_compose"] = dict(compose, subject=value, step="body")
+        session.modified = True
+        response_text = f"Subject: {value}. Now say your message."
+
+    elif field == "body":
+        to      = compose.get("to", "")
+        subject = compose.get("subject", "")
+        session["email_compose"] = dict(compose, body=value, step="confirm")
+        session.modified = True
+        readable_to = to.replace("@", " at ").replace(".", " dot ")
+        response_text = (
+            f"Ready to send. To: {readable_to}. Subject: {subject}. "
+            f"Message: {value}. Say yes to confirm or cancel to abort."
+        )
+
+    elif field == "confirm":
+        # value should be "yes" or similar — frontend already filtered "no"
+        to      = compose.get("to", "")
+        subject = compose.get("subject", "")
+        body_v  = compose.get("body", "")
+        session.pop("email_compose", None)
+        session.modified = True
+        try:
+            success, message = send_email(session, to, subject, body_v)
+            if success:
+                readable_to = to.replace("@", " at ").replace(".", " dot ")
+                response_text = f"Email sent successfully to {readable_to}!"
+            else:
+                response_text = f"Failed to send email. {message}. Please try again."
+        except Exception as exc:
+            logger.error("Text compose send error: %s", exc)
+            response_text = "Sorry, I could not send the email. Please check your settings."
+
+    else:
+        response_text = "Unknown field."
+
+    audio_url = None
+    if response_text:
+        tts_path = speak_to_file(response_text)
+        if tts_path:
+            audio_url = f"/static/audio/{os.path.basename(tts_path)}"
+
+    return {
+        "transcription": f"[typed] {value}",
+        "intent":        "send_email",
+        "response_text": response_text,
+        "audio_url":     audio_url,
         "email_step":    (session.get("email_compose") or {}).get("step"),
     }

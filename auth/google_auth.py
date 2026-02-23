@@ -61,7 +61,10 @@ def _build_flow(state: str = None) -> Flow:
         scopes=Config.GOOGLE_SCOPES,
         state=state,
     )
-    flow.redirect_uri = url_for("google_auth.oauth_callback", _external=True)
+    # Use the pinned URI from config so it always matches Google Cloud Console.
+    # url_for(_external=True) varies between 127.0.0.1 and localhost depending
+    # on how Flask is started, causing redirect_uri_mismatch errors.
+    flow.redirect_uri = Config.GOOGLE_REDIRECT_URI
     return flow
 
 
@@ -95,7 +98,14 @@ def oauth_callback():
     flow = _build_flow(state=state)
 
     try:
-        flow.fetch_token(authorization_response=request.url)
+        # Normalise the callback URL to the same host as GOOGLE_REDIRECT_URI
+        # so the token exchange never gets a host mismatch (127.0.0.1 vs localhost).
+        callback_url = request.url.replace("http://localhost:", "http://127.0.0.1:") \
+                                  .replace("https://localhost:", "https://127.0.0.1:")
+        if "127.0.0.1" not in Config.GOOGLE_REDIRECT_URI and "localhost" in Config.GOOGLE_REDIRECT_URI:
+            callback_url = request.url.replace("http://127.0.0.1:", "http://localhost:") \
+                                      .replace("https://127.0.0.1:", "https://localhost:")
+        flow.fetch_token(authorization_response=callback_url)
     except Exception as exc:
         return {"error": f"OAuth token exchange failed: {exc}"}, 400
 

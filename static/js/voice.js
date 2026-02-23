@@ -82,10 +82,17 @@ async function startRecording() {
   if (!ready) return;
 
   // AudioContext might have been left suspended by the browser after TTS.
-  // If so we can't resume it without a user gesture — just wait for next tap.
+  // Unlike creation, resume() IS permitted outside a user-gesture once the
+  // context was originally created inside one.
   if (audioCtx.state === 'suspended') {
-    setStatus('Tap 🎤 to activate microphone', 'idle');
-    return;
+    try {
+      await audioCtx.resume();
+    } catch (_) {}
+    // If still suspended we need a real user gesture — show a prompt and retry
+    if (audioCtx.state === 'suspended') {
+      setStatus('Tap 🎤 to reactivate microphone', 'idle');
+      return;
+    }
   }
 
   pcmBuffers = [];
@@ -127,9 +134,17 @@ function stopRecording() {
 }
 
 // ── Merge → resample → WAV → POST ─────────────────────────────────────────────
+// ── Helper: restart mic after a short grace period ──────────────────────────
+// Called at the end of every non-interactive path so the mic is always-on.
+function _autoRestart(delayMs = 600) {
+  setTimeout(() => { if (!isRecording && !isSpeaking) startRecording(); }, delayMs);
+}
+
 async function processAndSend(buffers) {
+  // Recording timed out with no audio — just restart silently
   if (!buffers.length) {
-    setStatus('No audio captured — try again', 'error');
+    setStatus('🎤 Listening…', 'idle');
+    _autoRestart(300);
     return;
   }
   setStatus('Processing…', 'processing');
@@ -156,6 +171,7 @@ async function processAndSend(buffers) {
 
     if (!res.ok) {
       setStatus('Server error: ' + (data.error || 'Unknown'), 'error');
+      _autoRestart(1500);   // pause a bit so user can read the error, then retry
       return;
     }
 
@@ -164,45 +180,54 @@ async function processAndSend(buffers) {
 
     // ── Track email compose step ──────────────────────────────────────────────
     _emailStep = data.email_step || null;
+    _updateTypeInBox();
 
     // ── Handle special intents ────────────────────────────────────────────────
     if (data.intent === 'stop_reading') {
-      // Instant cut (Web Speech watcher may have already done this, but be safe)
+      // Instant cut — go idle, user taps when ready
       _stopSpeechWatcher();
       if (_ttsAudio) { _ttsAudio.pause(); _ttsAudio.src = ''; _ttsAudio = null; }
       _setSpeakingUI(false);
       setStatus('✋ Stopped · Tap 🎤 to continue', 'idle');
+      return;   // intentional idle — do NOT auto-restart
+    }
+
+    if (data.intent === 'logout') {
+      _releaseMic();
+      if (data.audio_url) playTTS(data.audio_url);
+      setTimeout(() => { window.location.href = '/'; }, 2500);
       return;
     }
 
-    if (data.intent === 'cancel_email') {
-      _emailStep = null;
-      if (data.audio_url) { playTTS(data.audio_url); return; }  // TTS onended auto-restarts
-      setStatus('Email cancelled · Ready to listen', 'idle');
-      startRecording();
-      return;
-    }
-
-    // ── Normal flow ───────────────────────────────────────────────────────────
-    // If nothing was heard (silence), just go back to ready state silently
+    // ── Silence / nothing recognised — restart immediately & quietly ─────────
     if (!data.transcription && data.intent === 'unknown') {
-      setStatus('Ready · Tap 🎤 to speak', 'idle');
+      setStatus('🎤 Listening…', 'idle');
+      _autoRestart(300);
       return;
     }
-    // Show compose step as status hint
-    const stepLabels = { to: '📧 Step 1/4 · Say recipient address', subject: '📝 Step 2/4 · Say subject', body: '💬 Step 3/4 · Say your message', confirm: '✅ Step 4/4 · Say "confirm" or "cancel"' };
+
+    // ── Show compose step label or generic done status ────────────────────────
+    const stepLabels = {
+      to:      '📧 Step 1/4 · Say the e-mail address — or type it in the box below',
+      subject: '📝 Step 2/4 · Say the subject (or type below)',
+      body:    '💬 Step 3/4 · Say your message (or type below)',
+      confirm: '✅ Step 4/4 · Say “yes” to send · “cancel” to abort',
+    };
     const statusMsg = _emailStep ? stepLabels[_emailStep] : ('Done • ' + (data.intent || '—'));
     setStatus(statusMsg, _emailStep ? 'recording' : 'done');
 
-    if (data.audio_url) playTTS(data.audio_url);
-    if (data.intent === 'logout') {
-      _releaseMic();
-      setTimeout(() => { window.location.href = '/'; }, 2500);
+    if (data.audio_url) {
+      // playTTS → onended already calls _autoRestart, so we're covered
+      playTTS(data.audio_url);
+    } else {
+      // No TTS for this response (pyttsx3 failed, or TTS skipped) — restart anyway
+      _autoRestart(600);
     }
 
   } catch (err) {
     setStatus('Network error: ' + err.message, 'error');
     console.error(err);
+    _autoRestart(1500);
   }
 }
 
@@ -327,15 +352,15 @@ function playTTS(url) {
     _ttsAudio = null;
     _stopSpeechWatcher();
     _setSpeakingUI(false);
-    // Only auto-start if TTS completed naturally (not interrupted by stop)
-    // A 400ms grace delay avoids immediately capturing end-of-speech noise
-    setTimeout(() => { if (!isRecording && !isSpeaking) startRecording(); }, 400);
+    setStatus('🎤 Listening…', 'idle');
+    _autoRestart(400);
   };
   a.onerror = () => {
     _ttsAudio = null;
     _stopSpeechWatcher();
     _setSpeakingUI(false);
-    setTimeout(() => { if (!isRecording && !isSpeaking) startRecording(); }, 400);
+    setStatus('🎤 Listening…', 'idle');
+    _autoRestart(400);
   };
 
   a.play()
@@ -413,5 +438,94 @@ function setStatus(msg, type = 'idle') {
   el.className  = 'text-center text-sm mt-2 ' + (colors[type] || colors.idle);
   el.textContent = msg;
 }
+
+// ── Type-in fallback for voice compose ────────────────────────────────────────
+function _updateTypeInBox() {
+  const box   = $('typeInBox');
+  const input = $('typeInInput');
+  if (!box) return;
+  if (_emailStep) {
+    const placeholders = {
+      to:      'recipient@gmail.com',
+      subject: 'Email subject…',
+      body:    'Your message…',
+      confirm: 'Type YES to confirm or NO to cancel',
+    };
+    input.placeholder = placeholders[_emailStep] || '';
+    box.classList.remove('hidden');
+  } else {
+    box.classList.add('hidden');
+    input.value = '';
+  }
+}
+
+async function submitTypeIn() {
+  const input = $('typeInInput');
+  const value = (input.value || '').trim();
+  if (!value) return;
+
+  const field = _emailStep;
+  if (!field) return;
+
+  // Confirm step: handle yes/no locally — no server call needed for "cancel"
+  if (field === 'confirm') {
+    if (/^(no|n|cancel|abort|stop|quit)/i.test(value)) {
+      _emailStep = null;
+      _updateTypeInBox();
+      setStatus('Email cancelled · Ready to listen', 'idle');
+      _autoRestart(300);
+      return;
+    }
+    if (!/^(yes|y|confirm|ok|okay|send|go)/i.test(value)) {
+      $('responseText').textContent = 'Type YES to send or NO to cancel.';
+      return;
+    }
+  }
+
+  setStatus('Processing…', 'processing');
+  $('typeInBox').classList.add('hidden');
+
+  try {
+    const res  = await fetch('/voice/compose-text', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ field, value }),
+    });
+    const data = await res.json();
+    _handleComposeResponse(data);
+  } catch (err) {
+    setStatus('Network error: ' + err.message, 'error');
+    _autoRestart(1500);
+  }
+}
+
+function dismissTypeIn() {
+  $('typeInBox').classList.add('hidden');
+  $('typeInInput').value = '';
+}
+
+// Shared handler for both voice and text-input compose responses
+function _handleComposeResponse(data) {
+  $('transcriptionText').textContent = data.transcription || '(typed)';
+  $('responseText').textContent      = data.response_text || '';
+  _emailStep = data.email_step || null;
+  _updateTypeInBox();
+
+  const stepLabels = {
+    to:      '📧 Step 1/4 · Say the e-mail address — or type it in the box below',
+    subject: '📝 Step 2/4 · Say the subject (or type below)',
+    body:    '💬 Step 3/4 · Say your message (or type below)',
+    confirm: '✅ Step 4/4 · Say "yes" to send · "cancel" to abort',
+  };
+  const statusMsg = _emailStep ? stepLabels[_emailStep] : ('Done • ' + (data.intent || '—'));
+  setStatus(statusMsg, _emailStep ? 'recording' : 'done');
+
+  if (data.audio_url) {
+    playTTS(data.audio_url);
+  } else {
+    _autoRestart(600);
+  }
+}
+
 // Release mic tracks when page closes / navigates away
 window.addEventListener('beforeunload', _releaseMic);

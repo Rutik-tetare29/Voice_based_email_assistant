@@ -35,6 +35,13 @@ class Config:
     ]
     OAUTHLIB_INSECURE_TRANSPORT = os.getenv("OAUTHLIB_INSECURE_TRANSPORT", "1")
 
+    # Pinned OAuth redirect URI — must match exactly what is registered in
+    # Google Cloud Console → APIs & Services → Credentials → Authorised redirect URIs
+    GOOGLE_REDIRECT_URI = os.getenv(
+        "GOOGLE_REDIRECT_URI",
+        "http://127.0.0.1:5000/login/google/callback",
+    )
+
     # Gmail IMAP / SMTP (App Password flow)
     GMAIL_IMAP_HOST = "imap.gmail.com"
     GMAIL_SMTP_HOST = "smtp.gmail.com"

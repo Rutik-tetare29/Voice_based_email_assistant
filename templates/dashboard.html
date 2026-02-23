@@ -90,6 +90,26 @@
           <span class="text-xs text-gray-500 block mb-1">Assistant:</span>
           <p id="responseText" class="text-green-300 text-sm font-medium">—</p>
         </div>
+
+        <!-- ── Type-in fallback (shown when voice can't parse email) ── -->
+        <div id="typeInBox" class="hidden mt-4 bg-white/5 border border-purple-500/40 rounded-2xl p-4 space-y-3">
+          <p class="text-xs text-purple-300 font-semibold">📝 Type the value instead:</p>
+          <input id="typeInInput" type="text"
+            class="w-full bg-white/10 border border-white/20 rounded-xl px-3 py-2 text-white
+                   placeholder-gray-500 focus:outline-none focus:border-purple-400 text-sm"
+            placeholder="e.g. someone@gmail.com" />
+          <div class="flex gap-2">
+            <button onclick="submitTypeIn()"
+              class="flex-1 bg-gradient-to-r from-purple-600 to-pink-600 text-white text-sm
+                     font-bold py-2 rounded-xl hover:opacity-90 transition">
+              ✅ Use This
+            </button>
+            <button onclick="dismissTypeIn()"
+              class="px-4 py-2 bg-white/10 hover:bg-white/20 rounded-xl text-sm transition">
+              ✖
+            </button>
+          </div>
+        </div>
       </div>
 
       <!-- Quick commands hint -->
