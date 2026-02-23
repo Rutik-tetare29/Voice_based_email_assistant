@@ -10,7 +10,7 @@
  * SOLUTION:
  *   ScriptProcessor captures raw Float32 PCM directly from the mic at the
  *   browser's native rate → we resample to 16 kHz mono → write PCM-16 WAV
- *   → POST to Flask → Vosk transcribes it reliably.
+ *   → POST to Flask → Whisper transcribes it reliably.
  */
 
 // ── State ─────────────────────────────────────────────────────────────────────
@@ -27,7 +27,7 @@ let _ttsAudio       = null;    // reference to current <audio> element
 let _emailStep      = null;    // current step of voice-guided email compose (or null)
 let _wsRecog        = null;    // Web Speech API recognizer used during TTS playback
 
-const TARGET_SAMPLE_RATE = 16000;   // Vosk requirement
+const TARGET_SAMPLE_RATE = 16000;   // Whisper requirement
 const MAX_RECORD_SECONDS = 8;
 const BUFFER_SIZE        = 4096;
 

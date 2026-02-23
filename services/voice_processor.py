@@ -3,7 +3,7 @@ Voice command processor.
 
 Pipeline:
     1. Save uploaded audio to disk as WAV
-    2. Run Vosk STT → get transcription text
+    2. Run Whisper STT → get transcription text
     3. Match an intent from the text
     4. Execute intent → produce response text
     5. Run pyttsx3 TTS → save response audio
@@ -16,7 +16,7 @@ import logging
 import difflib
 from werkzeug.datastructures import FileStorage
 
-from services.stt_vosk import transcribe, _model as _vosk_model
+from services.stt_whisper import transcribe, _model as _whisper_model
 from services.tts_engine import speak_to_file
 from services.email_service import fetch_emails, send_email
 from config import Config
@@ -25,9 +25,8 @@ logger = logging.getLogger(__name__)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Intent keyword tables
-# Each list contains the canonical word PLUS every common Vosk mis-transcription
-# for that word when spoken clearly by an Indian-English speaker with a small
-# model (vosk-model-small-en-us-0.15).
+# Each list contains the canonical word PLUS every common Whisper mis-transcription
+# for that word when spoken clearly by an Indian-English speaker.
 # ─────────────────────────────────────────────────────────────────────────────
 
 _INTENTS = {
@@ -154,7 +153,7 @@ _DOMAIN_FIXES = [
 def _normalize_email_address(text: str) -> str:
     """
     Convert a spoken email address to a valid format.
-    Handles the many ways Vosk (small model) mis-transcribes email components.
+    Handles the many ways Whisper mis-transcribes email components.
 
     Pronunciation guide spoken to the user:
         name  [at / at the rate / @ / add / hat]  domain  [dot / period / full stop]  tld
@@ -176,7 +175,7 @@ def _normalize_email_address(text: str) -> str:
     t = re.sub(r'\bat\s+(?:sign|symbol|mark)\b', '@', t)
     # "commercial at"
     t = re.sub(r'\bcommercial\s+at\b', '@', t)
-    # Vosk mis-hears "at" as "add" / "hat" / "that" / "had" / "rat" / "bat"
+    # Whisper sometimes mis-hears "at" as "add" / "hat" / "that" / "had" / "rat" / "bat"
     t = re.sub(r'\b(?:add|hat|that|had|rat|bat|cat|fat|sat|@)\b', '@', t)
     # Plain "at" between two non-space sequences
     t = re.sub(r'(?<=\S)\s+at\s+(?=\S)', '@', t)
@@ -455,16 +454,16 @@ def process_voice_command(audio_file: FileStorage, session: dict) -> dict:
     temp_path = os.path.join(Config.UPLOAD_FOLDER, f"input_{uuid.uuid4().hex}.wav")
     audio_file.save(temp_path)
 
-    # Early exit if Vosk model is not loaded
-    if _vosk_model is None:
-        tts_path = speak_to_file("Vosk model not loaded. Please download the model and set the path in your environment file.")
+    # Early exit if Whisper model is not loaded
+    if _whisper_model is None:
+        tts_path = speak_to_file("Whisper model failed to load. Please run: pip install openai-whisper")
         audio_url = f"/static/audio/{os.path.basename(tts_path)}" if tts_path else None
         try: os.remove(temp_path)
         except OSError: pass
         return {
             "transcription": "",
             "intent": "error",
-            "response_text": "Vosk model not loaded. Download a model from alphacephei.com/vosk/models and set VOSK_MODEL_PATH in your .env file.",
+            "response_text": "Whisper model not loaded. Run: pip install openai-whisper",
             "audio_url": audio_url,
         }
 

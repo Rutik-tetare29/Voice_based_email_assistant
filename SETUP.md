@@ -8,17 +8,14 @@ venv\Scripts\activate          # Windows
 pip install -r requirements.txt
 ```
 
-## 2. Download Vosk model
-```bash
-# Download from https://alphacephei.com/vosk/models
-# Recommended: vosk-model-small-en-us-0.15
-# Unzip so the folder is: voice_email_app/model/
-```
+## 2. Whisper model
+No manual download needed. The Whisper model is **automatically downloaded** to `~/.cache/whisper/` on first run.
+Default model: `base` (~145 MB). You can change it in `.env` (`WHISPER_MODEL=tiny/base/small/medium`).
 
 ## 3. Configure environment
 ```bash
 copy .env.example .env
-# Edit .env — set SECRET_KEY and VOSK_MODEL_PATH
+# Edit .env — set SECRET_KEY (and optionally WHISPER_MODEL)
 ```
 
 ## 4. Google OAuth setup (optional — for Gmail API login)

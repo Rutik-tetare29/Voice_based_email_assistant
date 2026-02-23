@@ -11,13 +11,6 @@ class Config:
     SECRET_KEY = os.getenv("SECRET_KEY", "change-me-in-production")
     DEBUG = os.getenv("DEBUG", "false").lower() == "true"
 
-    # Vosk model path — always resolve against BASE_DIR if relative
-    _vosk_raw = os.getenv(
-        "VOSK_MODEL_PATH",
-        os.path.join(BASE_DIR, "model", "vosk-model-small-en-us-0.15"),
-    )
-    VOSK_MODEL_PATH = _vosk_raw if os.path.isabs(_vosk_raw) else os.path.join(BASE_DIR, _vosk_raw)
-
     # Audio temp storage
     UPLOAD_FOLDER = os.path.join(BASE_DIR, "static", "audio")
     os.makedirs(UPLOAD_FOLDER, exist_ok=True)
@@ -34,6 +27,11 @@ class Config:
         "openid",
     ]
     OAUTHLIB_INSECURE_TRANSPORT = os.getenv("OAUTHLIB_INSECURE_TRANSPORT", "1")
+
+    # Whisper STT model
+    # Options: tiny (~75MB), base (~145MB, recommended), small (~465MB), medium (~1.5GB)
+    # Model is auto-downloaded to ~/.cache/whisper/ on first run.
+    WHISPER_MODEL = os.getenv("WHISPER_MODEL", "base")
 
     # Pinned OAuth redirect URI — must match exactly what is registered in
     # Google Cloud Console → APIs & Services → Credentials → Authorised redirect URIs
