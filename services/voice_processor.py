@@ -30,6 +30,41 @@ logger = logging.getLogger(__name__)
 # ─────────────────────────────────────────────────────────────────────────────
 
 _INTENTS = {
+    # ── Email navigation — listed FIRST so they override read/send keywords ──
+    "list_emails": [
+        "list emails", "list email", "list my emails", "list my email",
+        "show emails", "show email", "show inbox", "show my emails",
+        "what emails", "how many emails", "emails in inbox",
+        "check inbox", "check my inbox", "what is in my inbox",
+        "whats in my inbox", "inbox summary", "email summary",
+    ],
+    "next_email": [
+        # ── single-word shortcuts (must appear before multi-word so substring
+        #    check hits correctly when user says just "next") ──────────────────
+        "next email", "next mail", "read next", "read next email",
+        "the next one", "next one", "go next", "move next",
+        "forward", "forwards",
+        "email 2", "email two", "second email",
+        "email 3", "email three", "third email",
+        "email 4", "email four", "fourth email",
+        "email 5", "email five", "fifth email",
+        "next",                   # bare "next"
+    ],
+    "prev_email": [
+        "previous email", "previous mail", "read previous",
+        "go back", "the previous one", "email before",
+        "earlier email", "before that", "read previous email",
+        "previous", "prev",       # bare single-word forms
+        "back",
+    ],
+    "read_more": [
+        "read more", "continue reading", "more of this", "keep reading",
+        "rest of the email", "rest of email", "keep going",
+        "read the rest", "what else", "more please",
+        "continue",               # bare single-word form
+        "more",                   # bare "more"
+        "next part", "next chunk",
+    ],
     # send_email must be listed before read_email so that keywords like
     # "cent" (mishearing of "send") are matched before the generic "email"
     # substring in read_email grabs the whole phrase.
@@ -188,8 +223,23 @@ def _normalize_email_address(text: str) -> str:
 
     # ── 4. Special character names ────────────────────────────────────────────
     t = re.sub(r'\s*\bunderscore\b\s*', '_', t)
-    t = re.sub(r'\s*\b(?:dash|hyphen|minus)\b\s*', '-', t)
+    # Use a null-byte placeholder for intentional dashes (spoken as "dash"/"hyphen")
+    # so they survive the Whisper-separator removal in step 4b below.
+    t = re.sub(r'\s*\b(?:dash|hyphen|minus)\b\s*', '\x00', t)
     t = re.sub(r'\s*\bplus\b\s*', '+', t)
+
+    # ── 4b. Strip Whisper-inserted letter-separator hyphens ───────────────────
+    # When the user spells out their email letter-by-letter, Whisper inserts
+    # hyphens between the letters: "rutikte-t-e-t-k-r-e" → "rutiktetekre".
+    # Intentional dashes were protected as '\x00' in step 4, so we can safely
+    # strip all remaining bare hyphens from the local part only.
+    # (Domain hyphens like "x-y.com" come from the spoken domain text and are
+    # rarely user-spoken letter-by-letter, but to be safe we only strip the local.)
+    if '@' in t:
+        _lp, _rest = t.split('@', 1)
+        t = _lp.replace('-', '') + '@' + _rest
+    else:
+        t = t.replace('-', '')
 
     # ── 5. Strip filler words that creep in ───────────────────────────────────
     # "my email is", "send to", "the address is", etc.
@@ -203,7 +253,10 @@ def _normalize_email_address(text: str) -> str:
     # ── 7. Cleanup double punctuation / leading-trailing junk ─────────────────
     t = re.sub(r'\.{2,}', '.', t)   # ".." → "."
     t = re.sub(r'@{2,}', '@', t)    # "@@" → "@"
-    t = t.strip('.@_-')
+    t = t.strip('.@_-\x00')
+
+    # ── 8. Restore intentional dashes (spoken as "dash"/"hyphen") ─────────────
+    t = t.replace('\x00', '-')
 
     return t
 
@@ -271,8 +324,25 @@ def _detect_intent(text: str, session: dict) -> str:
     if _any_token_matches(lower, _STOP_EXACT):
         return "stop_reading"
 
-    # ── Standard intent matching ──────────────────────────────────────────────
-    # First try exact substring (fast path)
+    # ── "read email N" / "email number N" — positional navigation ────────────
+    _num_map = {
+        "one": 1, "1": 1, "two": 2, "2": 2, "three": 3, "3": 3,
+        "four": 4, "4": 4, "five": 5, "5": 5,
+    }
+    m = re.search(
+        r'(?:read|open|show|play)\s+(?:email|mail|message|number|no\.?)\s*'
+        r'(one|two|three|four|five|1|2|3|4|5)\b',
+        lower
+    )
+    if not m:
+        m = re.search(r'(?:email|message)\s+(?:number\s+)?(one|two|three|four|five|1|2|3|4|5)\b', lower)
+    if m:
+        session["_goto_email_idx"] = _num_map.get(m.group(1), 1) - 1
+        session.modified = True
+        return "next_email"
+
+    # ── Standard intent matching — list_emails / next / prev / read_more come
+    #    first in _INTENTS so they match before read_email's generic keywords ─
     for intent, keywords in _INTENTS.items():
         if any(kw in lower for kw in keywords):
             return intent
@@ -288,28 +358,221 @@ def _detect_intent(text: str, session: dict) -> str:
     return "unknown"
 
 
+# ── Email reading helpers ──────────────────────────────────────────────────────
+_CHUNK_SIZE = 400   # chars per spoken navigation chunk (~30 s at 165 WPM)
+
+# Server-side cache to avoid Flask session-cookie overflow (4 KB limit).
+# Keyed by user email address — survives the request lifetime of the process.
+_EMAIL_STORE: dict[str, list] = {}
+
+
+def _store_key(session: dict) -> str:
+    """Return a cache key unique to the logged-in user."""
+    # Primary: session["user"]["email"] (set by both GoogleUser and AppPasswordUser)
+    user_dict = session.get("user") or {}
+    email = user_dict.get("email") if isinstance(user_dict, dict) else None
+    return email or session.get("user_email") or session.get("email") or "anon"
+
+
+def _cache_emails(session: dict, limit: int = 5) -> list:
+    """Fetch emails and store in _EMAIL_STORE (NOT in the cookie-based session)."""
+    emails = fetch_emails(session, limit=limit)
+    key = _store_key(session)
+    _EMAIL_STORE[key] = emails
+    # Only store lightweight navigation pointers in the session cookie
+    session["_email_cache_key"]  = key
+    session["_email_read_idx"]   = 0
+    session["_email_read_chunk"] = 0
+    session.modified = True
+    return emails
+
+
+def _get_cached_emails(session: dict) -> list | None:
+    """Return the cached email list for this user, or None if not cached."""
+    key = session.get("_email_cache_key") or _store_key(session)
+    return _EMAIL_STORE.get(key)
+
+
+# ── TTS-safe text helpers ──────────────────────────────────────────────────────
+
+def _clean_sender(from_str: str) -> str:
+    """
+    Convert a raw RFC-2822 From header into a short, TTS-safe spoken form.
+
+    Examples
+    --------
+    '"Do not reply" <no-reply@iirs.gov.in>'  →  'no-reply at iirs.gov.in'
+    'Rutik Tetare <rutik@gmail.com>'          →  'Rutik Tetare'
+    'rutik@gmail.com'                         →  'rutik at gmail.com'
+    """
+    s = from_str.strip()
+
+    # 1. Extract display name and address parts
+    m = re.match(r'^(.*?)<([^>]+)>', s)
+    if m:
+        display = m.group(1).strip().strip('"').strip("'").strip()
+        addr    = m.group(2).strip()
+        # If display name is meaningful (not empty / not equal to addr), use it
+        if display and display.lower() != addr.lower() and len(display) > 1:
+            # Limit to first 60 chars to avoid absurdly long TTS intros
+            display = display[:60].rstrip()
+            return _tts_safe(display)
+        # Otherwise speak the address in a readable way
+        return _tts_safe(addr.replace("@", " at ").replace(".", " dot "))
+    # No angle brackets — might be a plain address or plain name
+    if "@" in s:
+        return _tts_safe(s.replace("@", " at ").replace(".", " dot "))
+    return _tts_safe(s[:80])
+
+
+def _tts_safe(text: str) -> str:
+    """
+    Strip characters that confuse pyttsx3/SAPI5 SSML parser and clean up
+    whitespace so the engine produces reliable untruncated audio.
+
+    SAPI5 interprets < > as XML/SSML tags; encountering a malformed tag
+    silently aborts audio generation — hence the 'stops at sender' bug.
+    """
+    # Remove SSML/XML angle-bracket constructs entirely
+    text = re.sub(r'<[^>]*>', ' ', text)
+    # Replace remaining stray < > & with safe equivalents
+    text = text.replace('&', ' and ').replace('<', ' ').replace('>', ' ')
+    # Strip markdown-style formatting
+    text = re.sub(r'[*_`#~]', '', text)
+    # Collapse repeated punctuation
+    text = re.sub(r'[.]{2,}', '.', text)
+    text = re.sub(r'[-]{2,}', '-', text)
+    # URLs are unreadable — replace with "link"
+    text = re.sub(r'https?://\S+', 'link', text)
+    # Collapse whitespace
+    text = re.sub(r'\s+', ' ', text).strip()
+    return text
+
+
+def _read_email_at(email: dict, idx: int, total: int, chunk: int = 0) -> str:
+    """Speak one email, paginating the body into chunks."""
+    sender  = _clean_sender(email.get("from", "Unknown"))
+    subject = _tts_safe(email.get("subject", "No subject"))
+    body    = _tts_safe(
+        (email.get("body") or email.get("snippet") or "No content").strip()
+    )
+
+    start     = chunk * _CHUNK_SIZE
+    body_part = body[start : start + _CHUNK_SIZE]
+    has_more  = len(body) > start + _CHUNK_SIZE
+
+    ordinals = ["first", "second", "third", "fourth", "fifth"]
+    label    = ordinals[idx] if idx < len(ordinals) else f"email {idx + 1}"
+
+    if chunk == 0:
+        result = (
+            f"Reading your {label} email. "
+            f"From: {sender}. "
+            f"Subject: {subject}. "
+            f"Message: {body_part}"
+        )
+    else:
+        result = f"Continuing email {idx + 1}. {body_part}"
+
+    if has_more:
+        result += " Say 'read more' to continue."
+    else:
+        if idx < total - 1:
+            result += f" End of message. Say 'next' for email {idx + 2}."
+        else:
+            result += " That was your last email."
+    return result
+
+
 # ── Intent handlers ────────────────────────────────────────────────────────────
-def _handle_read_email(session: dict) -> str:
-    # Fetch only the 1 most recent email
-    emails = fetch_emails(session, limit=1)
+def _handle_list_emails(session: dict) -> str:
+    """List subjects + senders so user knows what's in inbox before reading."""
+    emails = _cache_emails(session, limit=5)
     if not emails:
         return "Your inbox is empty or I could not retrieve your emails."
-
-    # Read only the latest email with full content
-    latest = emails[0]
-    sender  = latest.get("from", "Unknown")
-    subject = latest.get("subject", "No subject")
-    body    = latest.get("body") or latest.get("snippet") or "No content"
-
-    # Trim body to a reasonable spoken length (~800 chars)
-    if len(body) > 800:
-        body = body[:800] + "... message continues."
-
+    lines = []
+    for i, e in enumerate(emails, 1):
+        lines.append(
+            f"Email {i}: from {_clean_sender(e.get('from', 'Unknown'))}. "
+            f"Subject: {_tts_safe(e.get('subject', 'No subject'))}."
+        )
     return (
-        f"Your latest email is from {sender}. "
-        f"Subject: {subject}. "
-        f"Message: {body}"
+        f"You have {len(emails)} email{'s' if len(emails) > 1 else ''} loaded. "
+        + " ".join(lines)
+        + " Say 'read email 1' or 'next' to read them."
     )
+
+
+def _handle_read_email(session: dict) -> str:
+    """Read the first (latest) email and cache all 5 for navigation."""
+    emails = _cache_emails(session, limit=5)
+    if not emails:
+        return "Your inbox is empty or I could not retrieve your emails."
+    return _read_email_at(emails[0], 0, len(emails), chunk=0)
+
+
+def _handle_next_email(session: dict) -> str:
+    """Read the next email, or a specific one if _goto_email_idx was set."""
+    emails = _get_cached_emails(session)
+    if not emails:
+        emails = _cache_emails(session, limit=5)
+
+    # Honour positional jump ("read email 3")
+    goto = session.pop("_goto_email_idx", None)
+    if goto is not None:
+        idx = int(goto)
+    else:
+        idx = session.get("_email_read_idx", 0) + 1
+
+    if idx >= len(emails):
+        return (
+            f"You've reached the end. There are only {len(emails)} emails loaded. "
+            "Say 'list emails' to hear the subjects again."
+        )
+
+    session["_email_read_idx"]   = idx
+    session["_email_read_chunk"] = 0
+    session.modified = True
+    return _read_email_at(emails[idx], idx, len(emails), chunk=0)
+
+
+def _handle_prev_email(session: dict) -> str:
+    """Go back to the previous email."""
+    emails = _get_cached_emails(session)
+    if not emails:
+        return "No emails loaded yet. Say 'read emails' to load your inbox first."
+
+    idx = session.get("_email_read_idx", 0) - 1
+    if idx < 0:
+        return "You're already at the first email."
+
+    session["_email_read_idx"]   = idx
+    session["_email_read_chunk"] = 0
+    session.modified = True
+    return _read_email_at(emails[idx], idx, len(emails), chunk=0)
+
+
+def _handle_read_more(session: dict) -> str:
+    """Read the next chunk of the current email body."""
+    emails = _get_cached_emails(session)
+    idx    = session.get("_email_read_idx", 0)
+    chunk  = session.get("_email_read_chunk", 0) + 1
+
+    if not emails or idx >= len(emails):
+        return "No email is currently being read. Say 'read emails' to start."
+
+    body  = (emails[idx].get("body") or emails[idx].get("snippet") or "").strip()
+    start = chunk * _CHUNK_SIZE
+    if start >= len(body):
+        nxt = idx + 1
+        if nxt < len(emails):
+            return f"That's the end of this email. Say 'next' for email {nxt + 1}."
+        return "That's the end of this email and your last loaded message."
+
+    session["_email_read_chunk"] = chunk
+    session.modified = True
+    return _read_email_at(emails[idx], idx, len(emails), chunk=chunk)
+
 
 
 def _handle_stop_reading() -> str:
@@ -426,8 +689,15 @@ def _handle_logout() -> str:
 
 def _handle_help() -> str:
     return (
-        "You can say: read email, send email, logout, or help. "
-        "I will carry out your request right away."
+        "You can say: "
+        "Read emails — to hear your inbox summary. "
+        "Next — to move to the next email. "
+        "Previous — to go back. "
+        "Read more — to hear the rest of a long email. "
+        "Read email 2 — to jump to a specific email. "
+        "Send email — to compose a new email. "
+        "Stop — to interrupt me while I am speaking. "
+        "Logout — to sign out."
     )
 
 
@@ -476,7 +746,11 @@ def process_voice_command(audio_file: FileStorage, session: dict) -> dict:
 
     # 4 — Execute intent
     intent_map = {
+        "list_emails":  lambda: _handle_list_emails(session),
         "read_email":   lambda: _handle_read_email(session),
+        "next_email":   lambda: _handle_next_email(session),
+        "prev_email":   lambda: _handle_prev_email(session),
+        "read_more":    lambda: _handle_read_more(session),
         "send_email":   lambda: _handle_send_email(session, transcription),
         "stop_reading": _handle_stop_reading,
         "cancel_email": lambda: _handle_cancel_email(session),

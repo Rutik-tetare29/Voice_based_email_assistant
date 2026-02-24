@@ -28,8 +28,11 @@ let _emailStep      = null;    // current step of voice-guided email compose (or
 let _wsRecog        = null;    // Web Speech API recognizer used during TTS playback
 
 const TARGET_SAMPLE_RATE = 16000;   // Whisper requirement
-const MAX_RECORD_SECONDS = 8;
+const MAX_RECORD_SECONDS = 12;       // default listen window (seconds)
+const EMAIL_LISTEN_SECS  = 15;       // longer window after email reading
 const BUFFER_SIZE        = 4096;
+
+let _lastIntent = null;              // tracks last server-returned intent
 
 // ── DOM shorthand ─────────────────────────────────────────────────────────────
 const $ = id => document.getElementById(id);
@@ -115,7 +118,10 @@ async function startRecording() {
 
   isRecording   = true;
   setRecordingUI(true);
-  recordTimeout = setTimeout(stopRecording, MAX_RECORD_SECONDS * 1000);
+  // Use a longer window when the user just heard an email chunk
+  const _emailReadIntents = new Set(['read_email','next_email','prev_email','read_more','list_emails']);
+  const listenSecs = _emailReadIntents.has(_lastIntent) ? EMAIL_LISTEN_SECS : MAX_RECORD_SECONDS;
+  recordTimeout = setTimeout(stopRecording, listenSecs * 1000);
 }
 
 // ── Stop ──────────────────────────────────────────────────────────────────────
@@ -177,6 +183,9 @@ async function processAndSend(buffers) {
 
     $('transcriptionText').textContent = data.transcription || '(nothing recognised)';
     $('responseText').textContent      = data.response_text || '';
+
+    // ── Track last intent (used for dynamic listen-window) ────────────────────
+    _lastIntent = data.intent || null;
 
     // ── Track email compose step ──────────────────────────────────────────────
     _emailStep = data.email_step || null;
@@ -352,15 +361,21 @@ function playTTS(url) {
     _ttsAudio = null;
     _stopSpeechWatcher();
     _setSpeakingUI(false);
-    setStatus('🎤 Listening…', 'idle');
-    _autoRestart(400);
+    // Show a contextual hint after email reading TTS
+    const _emailReadIntents = new Set(['read_email','next_email','prev_email','read_more','list_emails']);
+    if (_emailReadIntents.has(_lastIntent)) {
+      setStatus('🎤 Say "read more", "next email", "previous" or "stop reading"', 'idle');
+    } else {
+      setStatus('🎤 Listening…', 'idle');
+    }
+    _autoRestart(500);
   };
   a.onerror = () => {
     _ttsAudio = null;
     _stopSpeechWatcher();
     _setSpeakingUI(false);
     setStatus('🎤 Listening…', 'idle');
-    _autoRestart(400);
+    _autoRestart(500);
   };
 
   a.play()

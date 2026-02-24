@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Login — VoiceMail</title>
+  <title>Login - VoiceMail</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script>tailwind.config = { darkMode: 'class' }</script>
   <style>
@@ -14,14 +14,38 @@
       border: 1px solid rgba(255,255,255,0.15);
     }
     .tab-active { background: rgba(139,92,246,0.3); border-color: #8b5cf6; }
-    input:-webkit-autofill { -webkit-box-shadow: 0 0 0 30px #1e1b4b inset !important; -webkit-text-fill-color: #fff !important; }
+    input:-webkit-autofill {
+      -webkit-box-shadow: 0 0 0 30px #1e1b4b inset !important;
+      -webkit-text-fill-color: #fff !important;
+    }
+    @keyframes pulse-ring {
+      0%   { transform: scale(0.9); opacity: 0.8; }
+      50%  { transform: scale(1.15); opacity: 0.3; }
+      100% { transform: scale(0.9); opacity: 0.8; }
+    }
+    .mic-pulse { animation: pulse-ring 1.2s ease-in-out infinite; }
+    /* Accessibility: visible focus ring for keyboard users */
+    button:focus-visible, a:focus-visible {
+      outline: 3px solid #a78bfa;
+      outline-offset: 3px;
+    }
+    /* Status badge colour variants */
+    .sbadge-rec  { background: rgba(239,68,68,0.35);  color: #fca5a5; }
+    .sbadge-proc { background: rgba(234,179,8,0.35);  color: #fde68a; }
+    .sbadge-yn   { background: rgba(34,197,94,0.35);  color: #86efac; }
+    .sbadge-info { background: rgba(139,92,246,0.35); color: #c4b5fd; }
+    @keyframes countdown-shrink {
+      from { width: 100%; } to { width: 0%; }
+    }
+    .countdown-bar { animation: countdown-shrink linear forwards; }
   </style>
 </head>
 <body class="min-h-screen flex items-center justify-center text-white p-4">
   <div class="glass rounded-3xl w-full max-w-md p-8">
+
     <!-- Header -->
     <div class="text-center mb-8">
-      <div class="text-5xl mb-3">🎙️</div>
+      <div class="text-5xl mb-3">&#127897;&#65039;</div>
       <h1 class="text-3xl font-extrabold text-purple-300">VoiceMail</h1>
       <p class="text-gray-400 mt-1">Sign in to your email assistant</p>
     </div>
@@ -35,6 +59,10 @@
       <button id="tab-app" onclick="switchTab('app')"
         class="flex-1 py-2 text-sm font-semibold transition-all">
         App Password
+      </button>
+      <button id="tab-voice" onclick="switchTab('voice')"
+        class="flex-1 py-2 text-sm font-semibold transition-all">
+        &#127908; Voice
       </button>
     </div>
 
@@ -66,57 +94,727 @@
         </div>
         <div>
           <label class="block text-sm text-gray-300 mb-1">App Password</label>
-          <input id="password" type="password" required
-            class="w-full bg-white/10 border border-white/20 rounded-xl px-4 py-3 text-white
-                   placeholder-gray-500 focus:outline-none focus:border-purple-400 transition"
-            placeholder="xxxx xxxx xxxx xxxx" />
+          <div class="relative">
+            <input id="password" type="password" required
+              class="w-full bg-white/10 border border-white/20 rounded-xl px-4 py-3 pr-12 text-white
+                     placeholder-gray-500 focus:outline-none focus:border-purple-400 transition"
+              placeholder="xxxx xxxx xxxx xxxx" />
+            <button type="button" onclick="togglePasswordVisibility()"
+              class="absolute inset-y-0 right-0 flex items-center px-3 text-gray-400
+                     hover:text-white transition focus:outline-none"
+              title="Show / hide password" aria-label="Toggle password visibility">
+              <!-- Eye icon (show) -->
+              <svg id="icon-eye" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none"
+                viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round"
+                  d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                <path stroke-linecap="round" stroke-linejoin="round"
+                  d="M2.458 12C3.732 7.943 7.523 5 12 5c4.477 0 8.268 2.943 9.542 7
+                     -1.274 4.057-5.065 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+              </svg>
+              <!-- Eye-off icon (hide) — shown when password is visible -->
+              <svg id="icon-eye-off" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 hidden" fill="none"
+                viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round"
+                  d="M13.875 18.825A10.05 10.05 0 0112 19c-4.477 0-8.268-2.943-9.542-7
+                     a9.956 9.956 0 012.293-3.95M6.634 6.63A9.956 9.956 0 0112 5c4.477 0
+                     8.268 2.943 9.542 7a9.978 9.978 0 01-4.176 5.196M15 12a3 3 0
+                     11-4.243-4.243M3 3l18 18" />
+              </svg>
+            </button>
+          </div>
         </div>
         <button type="submit"
-          class="w-full bg-purple-600 hover:bg-purple-500 font-bold py-3 rounded-xl transition-all hover:scale-105">
+          class="w-full bg-purple-600 hover:bg-purple-500 font-bold py-3 rounded-xl
+                 transition-all hover:scale-105">
           Sign In
         </button>
       </form>
     </div>
 
-    <!-- Error message -->
-    <div id="error-msg" class="hidden mt-4 text-red-400 text-sm text-center bg-red-900/30 rounded-xl py-2 px-4"></div>
+    <!-- Voice Login Panel -->
+    <div id="panel-voice" class="hidden" role="region" aria-label="Voice Login">
+      <p class="text-gray-400 text-sm text-center mb-4">
+        Log in hands-free &mdash; no keyboard needed.
+      </p>
 
+      <!-- Step indicators with labels -->
+      <div class="flex justify-center items-center gap-4 mb-5">
+        <div class="flex items-center gap-2">
+          <div id="vstep-dot-1" class="w-3 h-3 rounded-full bg-purple-500 transition-all"></div>
+          <span id="vstep-lbl-1" class="text-xs font-semibold text-purple-300">Step 1: Email</span>
+        </div>
+        <div class="w-8 h-px bg-white/20"></div>
+        <div class="flex items-center gap-2">
+          <div id="vstep-dot-2" class="w-3 h-3 rounded-full bg-white/20 transition-all"></div>
+          <span id="vstep-lbl-2" class="text-xs font-semibold text-white/30">Step 2: Password</span>
+        </div>
+      </div>
+
+      <!-- Live instruction (screen-reader announced on every change) -->
+      <p id="v-instruction"
+         role="status" aria-live="polite" aria-atomic="true"
+         class="text-center text-purple-300 font-semibold text-sm mb-3">
+        Press the mic to start
+      </p>
+
+      <!-- Visual status badge -->
+      <div class="flex justify-center mb-3">
+        <span id="v-status-badge"
+              role="status"
+              class="hidden px-4 py-1 rounded-full text-xs font-bold uppercase tracking-widest sbadge-info">
+        </span>
+      </div>
+
+      <!-- Countdown progress bar (visible timer for recording) -->
+      <div id="v-countdown-wrap" class="hidden h-2 bg-white/10 rounded-full overflow-hidden mx-4 mb-4">
+        <div id="v-countdown-bar" class="h-full bg-purple-400 rounded-full countdown-bar"></div>
+      </div>
+
+      <div class="flex justify-center mb-6">
+        <div class="relative flex items-center justify-center">
+          <div id="v-pulse"    class="hidden mic-pulse absolute w-24 h-24 rounded-full bg-purple-500/30"></div>
+          <div id="v-yn-pulse" class="hidden mic-pulse absolute w-24 h-24 rounded-full bg-green-500/30"></div>
+          <button id="v-mic-btn"
+            onclick="vStartRecord()"
+            onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();vStartRecord();}"
+            aria-label="Microphone button. Press to start recording your Gmail address."
+            class="relative z-10 w-20 h-20 rounded-full bg-purple-600 hover:bg-purple-500
+                   flex items-center justify-center text-4xl shadow-lg transition-all hover:scale-105">
+            &#127908;
+          </button>
+        </div>
+      </div>
+      <div id="v-captured-box" class="hidden mb-4">
+        <p class="text-xs text-gray-400 mb-1 text-center" id="v-captured-label">Heard:</p>
+        <div class="relative">
+          <div class="bg-white/10 border border-white/20 rounded-xl px-4 py-3 pr-11 text-center
+                      text-white font-mono text-sm tracking-wide" id="v-captured-value"></div>
+          <!-- show/hide toggle — only visible for password captures -->
+          <button id="v-pass-toggle" onclick="_vToggleCapturedPass()"
+            class="hidden absolute inset-y-0 right-0 flex items-center px-3 text-gray-400
+                   hover:text-white transition focus:outline-none"
+            title="Show / hide password" aria-label="Toggle captured password visibility">
+            <svg id="v-pass-eye" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none"
+              viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+              <path stroke-linecap="round" stroke-linejoin="round"
+                d="M2.458 12C3.732 7.943 7.523 5 12 5c4.477 0 8.268 2.943 9.542 7
+                   -1.274 4.057-5.065 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+            </svg>
+            <svg id="v-pass-eye-off" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 hidden" fill="none"
+              viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round"
+                d="M13.875 18.825A10.05 10.05 0 0112 19c-4.477 0-8.268-2.943-9.542-7
+                   a9.956 9.956 0 012.293-3.95M6.634 6.63A9.956 9.956 0 0112 5c4.477 0
+                   8.268 2.943 9.542 7a9.978 9.978 0 01-4.176 5.196M15 12a3 3 0
+                   11-4.243-4.243M3 3l18 18" />
+            </svg>
+          </button>
+        </div>
+      </div>
+      <div id="v-action-btns" class="hidden flex gap-3" role="group" aria-label="Fallback confirmation buttons">
+        <button onclick="vRetry()"
+          aria-label="Retry - record again"
+          class="flex-1 bg-white/10 hover:bg-white/20 border border-white/20
+                 py-2 rounded-xl text-sm font-semibold transition-all">
+          &#8635; Retry
+        </button>
+        <button id="v-confirm-btn" onclick="vConfirm()"
+          aria-label="Confirm - this is correct"
+          class="flex-1 bg-purple-600 hover:bg-purple-500 py-2 rounded-xl
+                 text-sm font-semibold transition-all">
+          &#10003; Confirm
+        </button>
+      </div>
+      <!-- Fallback correct-it button (shown for email step without Web Speech API) -->
+      <div id="v-correct-btn" class="hidden mt-2">
+        <button onclick="_vEnterCorrectMode()"
+          aria-label="Correct the email - fix a letter or word by voice"
+          class="w-full bg-amber-600/40 hover:bg-amber-500/50 border border-amber-500/30
+                 py-2 rounded-xl text-sm font-semibold transition-all">
+          &#9998; Correct a Letter / Word
+        </button>
+      </div>
+    </div>
+
+    <div id="error-msg"
+      class="hidden mt-4 text-red-400 text-sm text-center bg-red-900/30 rounded-xl py-2 px-4">
+    </div>
     <p class="text-center text-gray-500 text-xs mt-6">
-      <a href="/" class="hover:text-gray-300">← Back to Home</a>
+      <a href="/" class="hover:text-gray-300">&larr; Back to Home</a>
     </p>
   </div>
 
   <script>
     function switchTab(tab) {
-      const tabs = ['google', 'app'];
-      tabs.forEach(t => {
-        document.getElementById(`tab-${t}`).classList.toggle('tab-active', t === tab);
-        document.getElementById(`panel-${t}`).classList.toggle('hidden', t !== tab);
+      ['google', 'app', 'voice'].forEach(function(t) {
+        document.getElementById('tab-' + t).classList.toggle('tab-active', t === tab);
+        document.getElementById('panel-' + t).classList.toggle('hidden', t !== tab);
       });
+      document.getElementById('error-msg').classList.add('hidden');
+      if (tab === 'voice') {
+        vReset();
+        // Speak welcome instructions for blind users after a short delay
+        setTimeout(function() {
+          _vSpeak('Voice login. Step one: press the microphone button and say your Gmail address clearly.');
+        }, 500);
+      }
+    }
+
+    function togglePasswordVisibility() {
+      var input  = document.getElementById('password');
+      var eyeOn  = document.getElementById('icon-eye');
+      var eyeOff = document.getElementById('icon-eye-off');
+      var show   = input.type === 'password';
+      input.type = show ? 'text' : 'password';
+      eyeOn .classList.toggle('hidden',  show);
+      eyeOff.classList.toggle('hidden', !show);
     }
 
     async function appPasswordLogin(e) {
       e.preventDefault();
-      const email = document.getElementById('email').value;
-      const password = document.getElementById('password').value;
-      const errBox = document.getElementById('error-msg');
-
+      var email    = document.getElementById('email').value;
+      var password = document.getElementById('password').value;
+      var errBox   = document.getElementById('error-msg');
       try {
-        const res = await fetch('/login/app-password', {
+        var res  = await fetch('/login/app-password', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email, password }),
+          body: JSON.stringify({ email: email, password: password }),
         });
-        const data = await res.json();
-        if (res.ok) {
-          window.location.href = data.redirect || '/dashboard';
-        } else {
-          errBox.textContent = data.error || 'Login failed';
-          errBox.classList.remove('hidden');
-        }
-      } catch {
+        var data = await res.json();
+        if (res.ok) { window.location.href = data.redirect || '/dashboard'; }
+        else { errBox.textContent = data.error || 'Login failed'; errBox.classList.remove('hidden'); }
+      } catch(err) {
         errBox.textContent = 'Network error. Please try again.';
         errBox.classList.remove('hidden');
+      }
+    }
+
+    var VL = {
+      step: 'email', emailVal: '', passVal: '',
+      audioCtx: null, processor: null, micSource: null, micStream: null,
+      pcmBufs: [], recording: false, recTimer: null, nativeSR: 44100,
+      ynRecog: null, cdTimer: null, ynContext: null,
+    };
+    var VL_TARGET_SR = 16000, VL_BUF_SIZE = 4096;
+    var VL_MAX_SECS_EMAIL = 20;   // 20s for email - slow speakers need time
+    var VL_MAX_SECS_PASS  = 15;   // 15s for password
+
+    function _vSetInstruction(t) {
+      var el = document.getElementById('v-instruction');
+      el.textContent = t;
+      // Update mic button aria-label to reflect current instruction
+      document.getElementById('v-mic-btn').setAttribute('aria-label', t);
+    }
+    function _vSetStatus(text, type) {
+      var el = document.getElementById('v-status-badge');
+      if (!text) { el.classList.add('hidden'); return; }
+      el.textContent = text;
+      el.className = 'px-4 py-1 rounded-full text-xs font-bold uppercase tracking-widest ' +
+        (type==='rec'?'sbadge-rec':type==='proc'?'sbadge-proc':type==='yn'?'sbadge-yn':'sbadge-info');
+      el.classList.remove('hidden');
+    }
+    function _vStartCountdown(secs) {
+      _vStopCountdown();
+      var wrap = document.getElementById('v-countdown-wrap');
+      var bar  = document.getElementById('v-countdown-bar');
+      bar.style.animation = 'none';
+      bar.style.width = '100%';
+      wrap.classList.remove('hidden');
+      // Force reflow so animation restarts cleanly
+      void bar.offsetWidth;
+      bar.style.animation = 'countdown-shrink ' + secs + 's linear forwards';
+    }
+    function _vStopCountdown() {
+      clearTimeout(VL.cdTimer);
+      var wrap = document.getElementById('v-countdown-wrap');
+      var bar  = document.getElementById('v-countdown-bar');
+      bar.style.animation = 'none';
+      bar.style.width = '100%';
+      wrap.classList.add('hidden');
+    }
+    function _vSetStepDots(a) {
+      document.getElementById('vstep-dot-1').className = 'w-3 h-3 rounded-full transition-all ' + (a===1?'bg-purple-500':'bg-white/20');
+      document.getElementById('vstep-dot-2').className = 'w-3 h-3 rounded-full transition-all ' + (a===2?'bg-purple-500':'bg-white/20');
+      document.getElementById('vstep-lbl-1').className = 'text-xs font-semibold ' + (a===1?'text-purple-300':'text-white/30');
+      document.getElementById('vstep-lbl-2').className = 'text-xs font-semibold ' + (a===2?'text-purple-300':'text-white/30');
+    }
+    // _vCapturedPassReal holds the actual password for the toggle
+    var _vCapturedPassReal = null;
+
+    function _vShowCaptured(lbl, val) {
+      document.getElementById('v-captured-label').textContent = lbl;
+      document.getElementById('v-captured-value').textContent = val;
+      document.getElementById('v-captured-box').classList.remove('hidden');
+      // Hide password toggle — not a password display
+      document.getElementById('v-pass-toggle').classList.add('hidden');
+      _vCapturedPassReal = null;
+    }
+    function _vShowCapturedPassword(lbl, maskedVal, realVal) {
+      _vCapturedPassReal = realVal;
+      document.getElementById('v-captured-label').textContent = lbl;
+      document.getElementById('v-captured-value').textContent = maskedVal;
+      document.getElementById('v-captured-box').classList.remove('hidden');
+      // Show toggle button, reset to hidden state (eye icon)
+      document.getElementById('v-pass-toggle').classList.remove('hidden');
+      document.getElementById('v-pass-eye').classList.remove('hidden');
+      document.getElementById('v-pass-eye-off').classList.add('hidden');
+    }
+    function _vToggleCapturedPass() {
+      var valEl  = document.getElementById('v-captured-value');
+      var eyeOn  = document.getElementById('v-pass-eye');
+      var eyeOff = document.getElementById('v-pass-eye-off');
+      var isHidden = eyeOff.classList.contains('hidden'); // currently showing stars
+      valEl.textContent = isHidden ? _vCapturedPassReal : '*'.repeat(_vCapturedPassReal.length);
+      eyeOn .classList.toggle('hidden',  isHidden);
+      eyeOff.classList.toggle('hidden', !isHidden);
+    }
+    function _vHideCaptured() {
+      document.getElementById('v-captured-box').classList.add('hidden');
+      document.getElementById('v-pass-toggle').classList.add('hidden');
+      _vCapturedPassReal = null;
+    }
+    function _vShowActions(showCorrect) {
+      document.getElementById('v-action-btns').classList.remove('hidden');
+      var cb = document.getElementById('v-correct-btn');
+      if (showCorrect) cb.classList.remove('hidden'); else cb.classList.add('hidden');
+    }
+    function _vHideActions()   {
+      document.getElementById('v-action-btns').classList.add('hidden');
+      document.getElementById('v-correct-btn').classList.add('hidden');
+    }
+    function _vSetMicIcon(t)   { document.getElementById('v-mic-btn').textContent = t; }
+    function _vSetMicEnabled(on) {
+      var btn = document.getElementById('v-mic-btn');
+      btn.disabled = !on; btn.style.opacity = on?'1':'0.5'; btn.style.cursor = on?'pointer':'default';
+    }
+    function _vPulse(color, on) {
+      document.getElementById(color==='purple'?'v-pulse':'v-yn-pulse').classList.toggle('hidden', !on);
+    }
+    function _vSpeak(text, onDone) {
+      if (!window.speechSynthesis) { if (onDone) onDone(); return; }
+      window.speechSynthesis.cancel();
+      var u = new SpeechSynthesisUtterance(text);
+      u.rate = 0.95; u.pitch = 1.0; u.volume = 1.0;
+      u.onend = function() { if (onDone) onDone(); };
+      window.speechSynthesis.speak(u);
+    }
+
+    function vReset() {
+      if (VL.ynRecog) { try { VL.ynRecog.abort(); } catch(e){} VL.ynRecog = null; }
+      if (window.speechSynthesis) window.speechSynthesis.cancel();
+      _vStopRecording();
+      _vStopCountdown();
+      VL.step = 'email'; VL.emailVal = ''; VL.passVal = ''; VL.correcting = false;
+      _vSetInstruction('Press the mic to start');
+      _vSetStatus('', '');
+      _vSetStepDots(1); _vHideCaptured(); _vHideActions();
+      _vPulse('purple', false); _vPulse('green', false);
+      _vSetMicIcon('\uD83C\uDFA4'); _vSetMicEnabled(true);
+      document.getElementById('error-msg').classList.add('hidden');
+    }
+
+    async function _vEnsureCtx() {
+      if (!VL.audioCtx) {
+        VL.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        VL.nativeSR = VL.audioCtx.sampleRate;
+      }
+      if (VL.audioCtx.state === 'suspended') await VL.audioCtx.resume();
+    }
+
+    function vStartRecord() {
+      if (VL.recording) { _vStopRecording(); return; }
+      if (VL.ynRecog) { try { VL.ynRecog.abort(); } catch(e){} VL.ynRecog = null; }
+      _vPulse('green', false); _vHideActions(); _vHideCaptured();
+      var isEmail   = VL.step === 'email';
+      var isCorrect = VL.step === 'email-correct';
+      _vSetInstruction('Get ready... mic opens after prompt');
+      _vSetStatus('Get Ready', 'info');
+      _vSetMicEnabled(false);
+      // SPEAK FIRST — mic only opens after TTS finishes so prompt is not recorded
+      var prompt = isEmail
+        ? 'Say your Gmail address now.'
+        : isCorrect
+          ? 'Say your correction. For example: add e before 206. Or: replace tetar with tetary.'
+          : 'Say your 16-character App Password now. Say each letter clearly, one at a time. For example: A, B, C, D. You may also say letter names like alpha, bravo, or bee, see, dee.';
+      _vSpeak(prompt, function() { _vBeginCapture(isEmail, isCorrect); });
+    }
+
+    async function _vBeginCapture(isEmail, isCorrect) {
+      try {
+        await _vEnsureCtx();
+        VL.micStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+        VL.micSource = VL.audioCtx.createMediaStreamSource(VL.micStream);
+        VL.processor  = VL.audioCtx.createScriptProcessor(VL_BUF_SIZE, 1, 1);
+        VL.pcmBufs = [];
+        VL.processor.onaudioprocess = function(e) {
+          VL.pcmBufs.push(new Float32Array(e.inputBuffer.getChannelData(0)));
+        };
+        VL.micSource.connect(VL.processor);
+        VL.processor.connect(VL.audioCtx.destination);
+        VL.recording = true;
+        _vPulse('purple', true);
+        _vSetMicIcon('\u23F9');
+        _vSetMicEnabled(true);
+        var secs = isEmail ? VL_MAX_SECS_EMAIL : isCorrect ? 8 : VL_MAX_SECS_PASS;
+        _vSetInstruction(isEmail
+          ? 'Recording... say your Gmail address (' + secs + 's)'
+          : isCorrect
+            ? 'Recording... say your correction command'
+            : 'Recording ' + secs + 's — say all 16 letters clearly, one at a time');
+        _vSetStatus(isCorrect ? 'Say Correction' : 'Recording ' + secs + 's', isCorrect ? 'yn' : 'rec');
+        _vStartCountdown(secs);
+        VL.recTimer = setTimeout(_vStopRecording, secs * 1000);
+      } catch(err) {
+        _vSetInstruction('Mic error: ' + err.message);
+        _vSpeak('Microphone error. Please check your microphone and try again.');
+      }
+    }
+
+    function _vStopRecording() {
+      clearTimeout(VL.recTimer);
+      if (!VL.recording) return;
+      VL.recording = false;
+      _vPulse('purple', false);
+      _vSetMicIcon('\uD83C\uDFA4');
+      _vSetMicEnabled(false);
+      _vStopCountdown();
+      _vSetStatus('Processing...', 'proc');
+      _vSetInstruction('Processing your voice, please wait...');
+      // Announce for blind users
+      _vSpeak('Got it. Processing your voice.');
+      try { VL.processor.disconnect(); VL.micSource.disconnect(); VL.micStream.getTracks().forEach(function(t){t.stop();}); } catch(e){}
+      _vTranscribe(_vBuildWav(VL.pcmBufs, VL.nativeSR));
+    }
+
+    function _vResample(f, fromSR, toSR) {
+      if (fromSR === toSR) return f;
+      var ratio = fromSR / toSR, out = new Float32Array(Math.floor(f.length / ratio));
+      for (var i = 0; i < out.length; i++) out[i] = f[Math.floor(i * ratio)];
+      return out;
+    }
+    function _vBuildWav(bufs, nativeSR) {
+      var total = 0; bufs.forEach(function(b){total+=b.length;});
+      var merged = new Float32Array(total), off = 0;
+      bufs.forEach(function(b){merged.set(b,off);off+=b.length;});
+      var rs = _vResample(merged, nativeSR, VL_TARGET_SR);
+      var p16 = new Int16Array(rs.length);
+      for (var i=0;i<rs.length;i++) p16[i]=Math.max(-32768,Math.min(32767,rs[i]*32768));
+      var buf = new ArrayBuffer(44+p16.byteLength), v = new DataView(buf);
+      function W(o,n){v.setUint32(o,n,true);} function W2(o,n){v.setUint16(o,n,true);}
+      function S(o,s){for(var i=0;i<s.length;i++)v.setUint8(o+i,s.charCodeAt(i));}
+      S(0,'RIFF');W(4,36+p16.byteLength);S(8,'WAVE');
+      S(12,'fmt ');W(16,16);W2(20,1);W2(22,1);
+      W(24,VL_TARGET_SR);W(28,VL_TARGET_SR*2);W2(32,2);W2(34,16);
+      S(36,'data');W(40,p16.byteLength);
+      new Int16Array(buf,44).set(p16);
+      return new Blob([buf],{type:'audio/wav'});
+    }
+
+    async function _vTranscribe(wavBlob) {
+      _vSetInstruction('Transcribing your voice...');
+      _vSetStatus('Processing...', 'proc');
+      var fd = new FormData();
+      fd.append('audio', wavBlob, 'login.wav');
+      fd.append('step', VL.step);
+      try {
+        var res = await fetch('/voice/login-transcribe', { method: 'POST', body: fd });
+        var data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Server error');
+        _vSetStatus('', '');
+        _vHandleTranscript(data.normalized);
+      } catch(err) {
+        _vSetStatus('Error', 'rec');
+        _vSetInstruction('Error: ' + err.message);
+        // Auto-retry after error - no keyboard needed
+        _vSpeak('An error occurred: ' + err.message + '. Let me try recording again.',
+          function(){ setTimeout(vStartRecord, 800); });
+      }
+    }
+
+    function _vHandleTranscript(normalized) {
+      if (!normalized) {
+        _vSetStatus('Not Heard', 'rec');
+        if (VL.step === 'email-correct') {
+          _vSetInstruction('Could not hear correction - say it again after the beep');
+          _vSpeak('I did not catch that correction. Try again. For example: add e before 206.',
+            function(){ setTimeout(vStartRecord, 600); });
+        } else {
+          _vSetInstruction('Could not hear anything - recording again automatically');
+          _vSpeak('I did not hear anything. Let me try again. Please speak clearly after the beep.',
+            function(){ setTimeout(vStartRecord, 600); });
+        }
+        return;
+      }
+      // ── Voice correction command ──────────────────────────────────────────
+      if (VL.step === 'email-correct') {
+        _vApplyCorrection(normalized);
+        return;
+      }
+      // ── Email transcription ───────────────────────────────────────────────
+      if (VL.step === 'email') {
+        VL.emailVal = normalized;
+        _vShowCaptured('Heard email:', normalized);
+        _vSetInstruction('Say YES to confirm, NO to re-record, or CORRECT IT to fix a letter');
+        _vSetStatus('Confirm Email', 'yn');
+        _vSpeak('I heard: ' + normalized +
+          '. Say yes to confirm, no to re-record, or correct it to fix a mistake.',
+          function(){setTimeout(_vListenYesNoCorrect, 400);});
+      } else {
+        // ── Password transcription ────────────────────────────────────────
+        VL.passVal = normalized;
+        var charCount = normalized.length;
+        _vShowCapturedPassword('Password captured (' + charCount + ' chars):', '*'.repeat(charCount), normalized);
+        _vSetInstruction('Captured ' + charCount + ' chars. Say YES to log in or NO to retry');
+        _vSetStatus('Confirm Password', 'yn');
+        _vSpeak('Password captured. I heard ' + charCount + ' characters. ' +
+          (charCount === 16 ? 'That looks right. ' : 'Expected 16 characters. ') +
+          'Say yes to log in or no to try again.',
+          function(){setTimeout(_vListenYesNo, 400);});
+      }
+    }
+
+    var _YES     = new Set(['yes','yeah','yep','yah','ya','confirm',
+                            'ok','okay','sure','right','go','proceed','done']);
+    var _NO      = new Set(['no','nope','nah','retry','again','redo',
+                            'back','repeat','cancel','different']);
+    // 'correct/fix/edit/change' → enter voice-correction mode for email
+    var _CORRECT = new Set(['fix','edit','modify','adjust','correction','alter','change']);
+
+    // ── Yes / No / Fix — Whisper-based, no Web Speech API dependency ────────
+    var VL_YN_SECS = 5;
+
+    function _vListenYesNoCorrect() { _vStartYesNo('email'); }
+
+    function _vStartYesNo(context) {
+      if (VL.ynRecog) { try{VL.ynRecog.abort();}catch(e){} VL.ynRecog = null; }
+      _vPulse('green', false);
+      VL.ynContext = context;
+      var isEmail = context === 'email';
+      _vSetInstruction(isEmail ? 'Say YES, NO, or FIX after the beep' : 'Say YES or NO after the beep');
+      _vSetStatus(isEmail ? 'YES / NO / FIX' : 'Say YES or NO', 'yn');
+      _vSetMicEnabled(false);
+      var prompt = isEmail
+        ? 'Say yes to confirm, no to re-record, or fix to correct a letter.'
+        : 'Say yes to log in, or no to try again.';
+      // Speak FIRST — mic opens only after prompt ends so prompt is not captured
+      _vSpeak(prompt, function() { _vBeginYnCapture(); });
+    }
+
+    async function _vBeginYnCapture() {
+      try {
+        await _vEnsureCtx();
+        VL.micStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+        VL.micSource = VL.audioCtx.createMediaStreamSource(VL.micStream);
+        VL.processor = VL.audioCtx.createScriptProcessor(VL_BUF_SIZE, 1, 1);
+        VL.pcmBufs   = [];
+        VL.processor.onaudioprocess = function(e) {
+          VL.pcmBufs.push(new Float32Array(e.inputBuffer.getChannelData(0)));
+        };
+        VL.micSource.connect(VL.processor);
+        VL.processor.connect(VL.audioCtx.destination);
+        VL.recording = true;
+        _vPulse('green', true);
+        _vSetMicIcon('\uD83D\uDC42');
+        _vStartCountdown(VL_YN_SECS);
+        VL.recTimer = setTimeout(_vStopYnCapture, VL_YN_SECS * 1000);
+      } catch(err) {
+        _vSetInstruction('Mic error: ' + err.message);
+        _vSpeak('Microphone error. Trying again.',
+          function(){ setTimeout(function(){ _vStartYesNo(VL.ynContext); }, 1000); });
+      }
+    }
+
+    function _vStopYnCapture() {
+      clearTimeout(VL.recTimer);
+      if (!VL.recording) return;
+      VL.recording = false;
+      _vPulse('green', false);
+      _vSetMicIcon('\uD83C\uDFA4');
+      _vStopCountdown();
+      _vSetStatus('Checking...', 'proc');
+      try {
+        VL.processor.disconnect();
+        VL.micSource.disconnect();
+        VL.micStream.getTracks().forEach(function(t){ t.stop(); });
+      } catch(e){}
+      _vTranscribeYesNo(_vBuildWav(VL.pcmBufs, VL.nativeSR));
+    }
+
+    async function _vTranscribeYesNo(wavBlob) {
+      _vSetInstruction('Checking your answer...');
+      var fd = new FormData();
+      fd.append('audio', wavBlob, 'yn.wav');
+      fd.append('step', 'yesno');
+      try {
+        var res  = await fetch('/voice/login-transcribe', { method: 'POST', body: fd });
+        var data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Server error');
+        _vHandleYesNo(data.normalized);
+      } catch(err) {
+        _vSetInstruction('Error - listening again...');
+        _vSpeak('Error. Trying again.',
+          function(){ setTimeout(function(){ _vStartYesNo(VL.ynContext); }, 500); });
+      }
+    }
+
+    function _vHandleYesNo(text) {
+      var t      = (text || '').toLowerCase();
+      var words  = t.split(/\s+/);
+      var isEmail = VL.ynContext === 'email';
+
+      var isFix = isEmail && (
+        words.some(function(w){ return _CORRECT.has(w); }) ||
+        /correct|fix|edit|wrong|mistake|change|modify|alter/.test(t)
+      );
+      var isYes = words.some(function(w){ return _YES.has(w); }) ||
+                  /^(yes|yeah|yep|ok|sure|correct|confirm|done)/.test(t);
+      var isNo  = words.some(function(w){ return _NO.has(w); }) ||
+                  /^(no|nope|nah|retry|again|wrong|different)/.test(t);
+
+      if (isFix) {
+        _vEnterCorrectMode();
+      } else if (isYes) {
+        vConfirm();
+      } else if (isNo) {
+        vRetry();
+      } else {
+        var heard = text || '(nothing heard)';
+        _vSetInstruction('Did not catch that - please say yes or no');
+        _vSpeak('I heard: ' + heard + '. Please say yes or no clearly.',
+          function(){ setTimeout(function(){ _vStartYesNo(VL.ynContext); }, 300); });
+      }
+    }
+
+    // ── Enter correction mode — record the correction command ────────────────
+    function _vEnterCorrectMode() {
+      if (VL.ynRecog) { try{VL.ynRecog.abort();}catch(err){} VL.ynRecog = null; }
+      _vPulse('green', false); _vHideActions();
+      VL.step = 'email-correct';
+      _vSetStatus('Correction Mode', 'proc');
+      _vSetInstruction('Say your correction after the prompt');
+      // Read the current email aloud first so the user knows what to correct
+      _vSpeak(
+        'Correction mode. Current email is: ' + VL.emailVal +
+        '. Say your correction. For example: ' +
+        'replace X with Y. ' +
+        'Add X before Y. ' +
+        'Remove X. ' +
+        'Add X at the end. ' +
+        'Change domain to gmail. ' +
+        'Or say the whole email is, followed by the full address.',
+        function(){ setTimeout(vStartRecord, 400); }
+      );
+    }
+
+    // ── Apply the spoken correction command via the Flask backend ────────────
+    async function _vApplyCorrection(cmdText) {
+      _vSetStatus('Applying...', 'proc');
+      _vSetInstruction('Applying: ' + cmdText);
+      try {
+        var res = await fetch('/voice/correct-email', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ email: VL.emailVal, command: cmdText }),
+        });
+        var data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Server error');
+        if (!data.changed) {
+          // Command was not understood — stay in correction mode, try again
+          _vSetStatus('Try Again', 'rec');
+          _vShowCaptured('Current email (unchanged):', VL.emailVal);
+          _vSetInstruction('Not applied - try a different correction');
+          _vSpeak(data.message + '. For example: add e before 206, or replace wrong with right.',
+            function(){ setTimeout(vStartRecord, 600); });
+          return;
+        }
+        // ── Successfully corrected ────────────────────────────────────────
+        VL.emailVal = data.corrected;
+        VL.step = 'email'; // back to email-confirm step
+        _vShowCaptured('Corrected email:', data.corrected);
+        _vSetStatus('Confirm Email', 'yn');
+        _vSetInstruction('Say YES to confirm, CORRECT IT to fix more, or NO to re-record');
+        _vSpeak(
+          data.message + '. New email is: ' + data.corrected +
+          '. Say yes to confirm, correct it to fix more, or no to start over.',
+          function(){setTimeout(_vListenYesNoCorrect, 400);}
+        );
+      } catch(err) {
+        VL.step = 'email-correct';
+        _vSetStatus('Error', 'rec');
+        _vSpeak('Error applying correction. Please try again.',
+          function(){ setTimeout(vStartRecord, 500); });
+      }
+    }
+
+    function _vListenYesNo() {
+      _vStartYesNo('password');
+    }
+
+    function vRetry() {
+      if (VL.ynRecog) { try{VL.ynRecog.abort();}catch(e){} VL.ynRecog = null; }
+      _vPulse('green', false); _vHideCaptured(); _vHideActions(); _vSetMicEnabled(false);
+      // Reset email-correct step back to email so we re-record from scratch
+      if (VL.step === 'email-correct') VL.step = 'email';
+      _vSetStatus('Retrying...', 'info');
+      var isEmail = VL.step === 'email';
+      _vSetInstruction(isEmail ? 'Say your Gmail address again...' : 'Say your App Password again...');
+      _vSpeak(
+        isEmail
+          ? 'No problem. Let me try again. Please say your Gmail address clearly.'
+          : 'No problem. Let me try again. Say your App Password, one letter at a time. Speak clearly and give a small pause between each letter.',
+        function(){setTimeout(vStartRecord, 300);}
+      );
+    }
+
+    async function vConfirm() {
+      if (VL.ynRecog) { try{VL.ynRecog.abort();}catch(e){} VL.ynRecog = null; }
+      _vPulse('green', false); _vHideActions();
+      // email-correct step shouldn't reach here, but handle defensively
+      if (VL.step === 'email-correct') VL.step = 'email';
+      if (VL.step === 'email') {
+        VL.step = 'password';
+        _vHideCaptured(); _vSetStepDots(2); _vSetMicEnabled(false);
+        _vSetStatus('Step 2 of 2', 'info');
+        _vSetInstruction('Step 2: Say all 16 App Password letters clearly, one at a time');
+        _vSpeak('Email confirmed! Step 2. Say your 16-character App Password. Speak each letter clearly, one at a time. You can also use letter names like bee, see, dee, or NATO alphabet like alpha, bravo, charlie.',  
+          function(){setTimeout(vStartRecord, 300);});
+      } else { await _vDoLogin(); }
+    }
+
+    async function _vDoLogin() {
+      _vSetInstruction('Logging in...'); _vHideActions(); _vSetMicEnabled(false);
+      document.getElementById('error-msg').classList.add('hidden');
+      try {
+        var res = await fetch('/login/app-password', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ email: VL.emailVal, password: VL.passVal }),
+        });
+        var data = await res.json();
+        if (res.ok) {
+          _vSetStatus('Success!', 'yn');
+          _vSetInstruction('Login successful! Redirecting...');
+          _vSpeak('Login successful. Welcome to VoiceMail!');
+          setTimeout(function(){window.location.href = data.redirect||'/dashboard';}, 1500);
+        } else {
+          var msg = data.error || 'Login failed';
+          document.getElementById('error-msg').textContent = msg;
+          document.getElementById('error-msg').classList.remove('hidden');
+          VL.step = 'password'; VL.passVal = '';
+          _vHideCaptured();
+          _vSetStatus('Login Failed', 'rec');
+          _vSetInstruction('Login failed - say your password again automatically');
+          // Auto-restart password recording — no keyboard needed
+          _vSpeak('Login failed. ' + msg + '. Let me try again. Say each letter of your App Password clearly, one at a time.',  
+            function(){setTimeout(vStartRecord, 500);});
+        }
+      } catch(err) {
+        _vSetStatus('Network Error', 'rec');
+        _vSetInstruction('Network error - retrying automatically...');
+        _vSpeak('Network error. Retrying automatically.', function(){setTimeout(vStartRecord,1500);});
       }
     }
   </script>
